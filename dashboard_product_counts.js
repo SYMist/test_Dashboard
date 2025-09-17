@@ -59,6 +59,8 @@ function readData(csvPath) {
   let resvCodeIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '예약코드');
   let contentIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '문의 내용');
   let reqIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '요청 ID');
+  let nameIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '상품명');
+  let createdIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === 'createdAt');
 
   const perProductType = new Map();
   const perProductLang = new Map();
@@ -79,6 +81,9 @@ function readData(csvPath) {
   const resvSet = new Set();
   const langTypeCounts = new Map();
   const resvCodeCounts = new Map();
+  const codeToName = new Map();
+  const dateCounts = new Map();
+  const perProductDateCounts = new Map();
   let totalInquiriesCount = 0;
   let nullResvCodeCount = 0;
 
@@ -90,7 +95,19 @@ function readData(csvPath) {
     const lang = String((row[langIdx] || '').trim());
     const content = (contentIdx !== -1 && row.length > contentIdx) ? String((row[contentIdx] || '').trim()) : '';
     const reqid = (reqIdx !== -1 && row.length > reqIdx) ? String((row[reqIdx] || '').trim()) : '';
+    const name = (nameIdx !== -1 && row.length > nameIdx) ? String((row[nameIdx] || '').trim()) : '';
+    const createdRaw = (createdIdx !== -1 && row.length > createdIdx) ? String((row[createdIdx] || '').trim()) : '';
     if (!code || !typ || !lang) continue;
+    if (name && !codeToName.has(code)) codeToName.set(code, name);
+    if (createdRaw) {
+      const d = createdRaw.slice(0, 10);
+      if (d) {
+        dateCounts.set(d, (dateCounts.get(d) || 0) + 1);
+        if (!perProductDateCounts.has(code)) perProductDateCounts.set(code, new Map());
+        const pm = perProductDateCounts.get(code);
+        pm.set(d, (pm.get(d) || 0) + 1);
+      }
+    }
     typeSet.add(typ);
     langSet.add(lang);
     if (!perProductType.has(code)) perProductType.set(code, new Map());
@@ -154,7 +171,7 @@ function readData(csvPath) {
       if (!statusTypeLang.get(status).has(typ)) statusTypeLang.get(status).set(typ, new Map());
       statusTypeLang.get(status).get(typ).set(lang, (statusTypeLang.get(status).get(typ).get(lang) || 0) + 1);
       if (!statusLangType.has(status)) statusLangType.set(status, new Map());
-      if (!statusLangType.get(status).has(lang)) statusLangType.set(status, new Map());
+      if (!statusLangType.get(status).has(lang)) statusLangType.get(status).set(lang, new Map());
       statusLangType.get(status).get(lang).set(typ, (statusLangType.get(status).get(lang).get(typ) || 0) + 1);
     }
   }
@@ -253,14 +270,21 @@ function readData(csvPath) {
     langTypeObj[l] = {};
     for (const [t, c] of tMap.entries()) langTypeObj[l][t] = c;
   }
-  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts };
+  const perProductDateCountsObj = {};
+  for (const [k, m] of perProductDateCounts.entries()) {
+    perProductDateCountsObj[k] = Object.fromEntries(m);
+  }
+  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj };
 }
 
 function generateHtml(data, opts = {}) {
-  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts } = data;
+  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts } = data;
   const labels = productOrder;
   const values = labels.map(k => totals.get(k) || 0);
-  const maxCount = values.length ? Math.max(...values) : 0;
+  const orderVals = labels.map(k => (orderCounts.get(k) || 0));
+  const maxInquiry = values.length ? Math.max(...values) : 0;
+  const maxOrder = orderVals.length ? Math.max(...orderVals) : 0;
+  const maxCount = Math.max(maxInquiry, maxOrder);
   const jsonMode = !!opts.jsonMode;
 
   const width = 1000;
@@ -325,6 +349,15 @@ function generateHtml(data, opts = {}) {
   const barsSvgType = renderBars(perProductType, types, colorOfType, 'type');
   const barsSvgLang = renderBars(perProductLang, langs, colorOfLang, 'lang');
   const barsSvgResvProduct = renderBars(perProductResv, resvStatuses, colorOfResv, 'resv');
+  const barsSvgOrders = labels.map((label, idx) => {
+    const y = marginTop + idx * (barHeight + barGap);
+    const order = orderCounts.get(label) || 0;
+    if (!order) return '';
+    const w = Math.max(1, xScale(order));
+    const hb = Math.max(6, Math.round(barHeight * 0.35));
+    const yo = y + (barHeight - hb); // bottom strip
+    return `<rect class="orders-bar" data-prod="${label}" x="${marginLeft}" y="${yo}" width="${w}" height="${hb}" fill="#9ca3af" fill-opacity="0.6" />`;
+  }).join('');
   const resvTotalsGlobal = resvStatuses.map(s => {
     const m = (typeof statusTypeCounts !== 'undefined' && statusTypeCounts && statusTypeCounts.get(s)) ? statusTypeCounts.get(s) : new Map();
     let sum = 0; for (const v of m.values()) sum += v; return sum;
@@ -416,7 +449,8 @@ function generateHtml(data, opts = {}) {
 
   const yLabelsProductsSvg = labels.map((label, idx) => {
     const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
-    return `<text x="${marginLeft - 8}" y="${y}" text-anchor="end" font-size="10" fill="#333">${label}</text>`;
+    const display = (codeNameMap && codeNameMap[label]) ? codeNameMap[label] : label;
+    return `<text class="prod-label" data-prod="${label}" x="${marginLeft - 8}" y="${y}" text-anchor="end" font-size="10" fill="#333" style="cursor:pointer;">${display}</text>`;
   }).join('');
   const yLabelsResvSvg = resvStatuses.map((s, idx) => {
     const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
@@ -523,6 +557,10 @@ function generateHtml(data, opts = {}) {
     .lt-item { font-size:12px; color:#374151; }
     .line-chart-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:8px; }
     .line-chart-title { font-size:13px; font-weight:600; color:#374151; }
+    .date-toolbar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:6px 0; font-size:12px; }
+    .date-toolbar label { display:flex; align-items:center; gap:6px; color:#374151; }
+    .date-toolbar .sep { color:#6b7280; }
+    .date-toolbar input[type="date"], .date-toolbar select { font-size:12px; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:#111; }
   </style>
   <meta name="color-scheme" content="light dark">
   <style media="(prefers-color-scheme: dark)">
@@ -553,12 +591,43 @@ function generateHtml(data, opts = {}) {
     .lt-card-title { color:#e5e7eb; }
     .lt-item { color:#d1d5db; }
     .line-chart-title { color:#e5e7eb; }
+    .date-toolbar label { color:#d1d5db; }
+    .date-toolbar .sep { color:#9ca3af; }
+    .date-toolbar input[type="date"], .date-toolbar select { background:#0d1323; color:#e5e7eb; border-color:#1f2937; }
   </style>
 </head>
 <body>
   <div class="container">
+    <div class="date-toolbar" aria-label="기간 및 정렬 선택" role="group">
+      <label for="filter-start">기간
+        <input type="date" id="filter-start" name="filter-start" />
+        <span class="sep">~</span>
+        <input type="date" id="filter-end" name="filter-end" />
+      </label>
+      <label for="filter-sort">정렬
+        <select id="filter-sort" name="filter-sort">
+          <option value="desc">문의 많은 순</option>
+          <option value="asc">문의 적은 순</option>
+        </select>
+      </label>
+      <button id="filter-apply" class="tab" type="button" aria-label="필터 적용">적용</button>
+    </div>
+    <div id="date-activity-card" class="card" style="margin-bottom:12px;">
+      <div class="line-chart-header">
+        <div class="line-chart-title">일자 별 문의 수</div>
+        <div id="tabs-date" class="tabs" role="tablist" style="margin:0; margin-left:auto;">
+          <button id="tab-date-d" class="tab active" role="tab" aria-selected="true">일 기준</button>
+          <button id="tab-date-m" class="tab" role="tab" aria-selected="false">월 기준</button>
+          <button id="tab-date-q" class="tab" role="tab" aria-selected="false">분기 기준</button>
+          <button id="tab-date-h" class="tab" role="tab" aria-selected="false">반기 기준</button>
+          <button id="tab-date-y" class="tab" role="tab" aria-selected="false">연 기준</button>
+        </div>
+      </div>
+      <div id="date-activity-meta" class="line-chart-meta" style="margin-bottom:6px;"></div>
+      <svg id="chart-date-activity" class="line-chart-svg" width="1000" height="220" viewBox="0 0 1000 220"></svg>
+    </div>
     <h1 id="page-title">상품 기반 분석</h1>
-    <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품 코드 (총 ${total})</div>
+    <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
     <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px;">
       <button id="tab-anal-product" class="tab active" role="tab" aria-selected="true">상품 기반 분석</button>
       <button id="tab-anal-resv" class="tab" role="tab" aria-selected="false">예약 기반 분석</button>
@@ -571,13 +640,16 @@ function generateHtml(data, opts = {}) {
     </div>
     <div class="card" style="margin-top:12px;">
       <div class="scroll-y" id="scroll-products">
-      <div id="tabs-prod-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px;">
+      <div id="tabs-prod-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px; align-items:center;">
         <button id="tab-prod-type" class="tab active" role="tab" aria-selected="true">문의 유형</button>
         <button id="tab-prod-lang" class="tab" role="tab" aria-selected="false">언어</button>
+        <label id="toggle-orders-wrap" style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" id="toggle-orders" /> 주문량 보기
+        </label>
       </div>
       <svg id="chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-ml="${marginLeft}" data-barh="${barHeight}">
         <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
-        <text id="y-axis-label" x="16" y="${marginTop + chartHeight / 2}" transform="rotate(-90 16,${marginTop + chartHeight / 2})" text-anchor="middle" font-size="12" fill="#666">상품 코드</text>
+        <text id="y-axis-label" x="16" y="${marginTop + chartHeight / 2}" transform="rotate(-90 16,${marginTop + chartHeight / 2})" text-anchor="middle" font-size="12" fill="#666">상품명</text>
         <text x="${marginLeft + chartWidth / 2}" y="${marginTop + chartHeight + 28}" text-anchor="middle" font-size="12" fill="#666">건수</text>
         <line x1="${marginLeft}" y1="${marginTop}" x2="${marginLeft}" y2="${marginTop + chartHeight}" stroke="#9ca3af" stroke-width="1" />
         <line x1="${marginLeft}" y1="${marginTop + chartHeight}" x2="${marginLeft + chartWidth}" y2="${marginTop + chartHeight}" stroke="#9ca3af" stroke-width="1" />
@@ -586,6 +658,7 @@ function generateHtml(data, opts = {}) {
         <g id="bars-lang" style="display:none">${barsSvgLang}</g>
         <g id="bars-resv" style="display:none">${typeof barsSvgResvTypes !== 'undefined' ? barsSvgResvTypes : barsSvgResv}</g>
         <g id="bars-resv-product" style="display:none">${barsSvgResvProduct}</g>
+        <g id="bars-orders" style="display:none">${barsSvgOrders}</g>
         <g id="ylabels-products">${yLabelsProductsSvg}</g>
         <g id="ylabels-resv" style="display:none">${yLabelsResvSvg}</g>
       </svg>
@@ -634,9 +707,10 @@ function generateHtml(data, opts = {}) {
     </div>
   </div>
   <div id="pie-tooltip" class="pie-tooltip hidden"></div>
+  <div id="product-tooltip" class="product-tooltip hidden"></div>
   <script>
     (function(){
-      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts) })};
+      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts })};
       const TOTAL = ${total};
 
       const tabAnalProduct = document.getElementById('tab-anal-product');
@@ -648,6 +722,7 @@ function generateHtml(data, opts = {}) {
       const barsLang = document.getElementById('bars-lang');
       const barsResv = document.getElementById('bars-resv');
       const barsResvProduct = document.getElementById('bars-resv-product');
+      const barsOrders = document.getElementById('bars-orders');
       const ylabelsProducts = document.getElementById('ylabels-products');
       const ylabelsResv = document.getElementById('ylabels-resv');
       const scrollProducts = document.getElementById('scroll-products');
@@ -662,16 +737,137 @@ function generateHtml(data, opts = {}) {
       const legendResv = document.getElementById('legend-resv');
       const yAxisLabel = document.getElementById('y-axis-label');
       const pie = document.getElementById('pie-tooltip');
+      const prodTip = document.getElementById('product-tooltip');
+      function hideProductTip(){ if (prodTip) { prodTip.classList.add('hidden'); prodTip.innerHTML = ''; } }
       const pageTitle = document.getElementById('page-title');
       const chartDesc = document.getElementById('chart-desc');
       const detail = document.getElementById('bar-detail');
       const svg = document.getElementById('chart');
+      const toggleOrders = document.getElementById('toggle-orders');
+
+      function renderDateActivity(mode) {
+        const container = document.getElementById('chart-date-activity');
+        if (!container || !DATA.dateCounts) return;
+        const dayEntries = Object.entries(DATA.dateCounts);
+        if (!dayEntries.length) { container.innerHTML = ''; return; }
+
+        function pad2(n){ return (n < 10 ? '0' : '') + n; }
+        function groupEntries(entries, mode){
+          const map = new Map();
+          for (const [d, c0] of entries) {
+            const c = Number(c0) || 0;
+            const y = Number(d.slice(0,4));
+            const m = Number(d.slice(5,7));
+            let key = d;
+            if (mode === 'm') key = y + '-' + pad2(m);
+            else if (mode === 'q') { const q = Math.floor((m-1)/3)+1; key = y + '-Q' + q; }
+            else if (mode === 'h') { const h = (m <= 6) ? 'H1' : 'H2'; key = y + '-' + h; }
+            else if (mode === 'y') key = String(y);
+            // default 'd' keeps YYYY-MM-DD
+            map.set(key, (map.get(key) || 0) + c);
+          }
+          const labels = Array.from(map.keys());
+          labels.sort(function(a,b){
+            if (mode === 'd' || mode === 'm' || mode === 'y') return String(a).localeCompare(String(b));
+            // q/h need custom within year
+            const ay = Number(String(a).slice(0,4));
+            const by = Number(String(b).slice(0,4));
+            if (ay !== by) return ay - by;
+            if (mode === 'q') {
+              const aq = Number(String(a).match(/Q(\d)/)?.[1] || 0);
+              const bq = Number(String(b).match(/Q(\d)/)?.[1] || 0);
+              return aq - bq;
+            } else {
+              const ah = String(a).includes('H1') ? 1 : 2;
+              const bh = String(b).includes('H1') ? 1 : 2;
+              return ah - bh;
+            }
+          });
+          const vals = labels.map(l => map.get(l) || 0);
+          return { labels, values: vals };
+        }
+
+        const modeSafe = (mode === 'm' || mode === 'q' || mode === 'h' || mode === 'y') ? mode : 'd';
+        const grouped = groupEntries(dayEntries, modeSafe);
+        const labels = grouped.labels;
+        const values = grouped.values;
+        const minDate = labels[0];
+        const maxDate = labels[labels.length - 1];
+        const total = values.reduce(function(a,b){ return a+b; }, 0);
+        const unitMap = { d: '일', m: '월', q: '분기', h: '반기', y: '연' };
+        const meta = document.getElementById('date-activity-meta');
+        if (meta) meta.textContent = '단위: ' + unitMap[modeSafe] + ' · 기간: ' + minDate + ' ~ ' + maxDate + ' · 총 ' + total;
+
+        const width = 1000, height = 220;
+        const marginLeft = 50, marginRight = 20, marginTop = 20, marginBottom = 28;
+        const chartWidth = width - marginLeft - marginRight;
+        const chartHeight = height - marginTop - marginBottom;
+        const maxVal = values.length ? Math.max.apply(null, values) : 0;
+        const xi = function(i){ if (labels.length <= 1) return marginLeft; return marginLeft + Math.round((i/(labels.length-1)) * chartWidth); };
+        const yi = function(v){ if (maxVal === 0) return marginTop + chartHeight; return marginTop + (chartHeight - Math.round((v/maxVal) * chartHeight)); };
+        let d = '';
+        for (let i = 0; i < labels.length; i++) {
+          const x = xi(i), y = yi(values[i]);
+          d += (i === 0 ? 'M ' : ' L ') + x + ' ' + y;
+        }
+        const ticks = 5;
+        const xTicks = [];
+        for (let i = 0; i <= ticks; i++) {
+          const idx = Math.round((labels.length - 1) * (i / ticks));
+          xTicks.push({ x: xi(idx), label: labels[idx] });
+        }
+        let xAxis = '';
+        for (const t of xTicks) {
+          xAxis += '<line x1="' + t.x + '" y1="' + (marginTop + chartHeight) + '" x2="' + t.x + '" y2="' + (marginTop + chartHeight + 4) + '" stroke="#9ca3af" />'
+                 + '<text x="' + t.x + '" y="' + (marginTop + chartHeight + 16) + '" text-anchor="middle" font-size="10" fill="#666">' + t.label + '</text>';
+        }
+        let yAxis = '';
+        for (let i = 0; i <= ticks; i++) {
+          const val = Math.round((maxVal * i) / ticks);
+          const y = yi(val);
+          yAxis += '<line x1="' + marginLeft + '" y1="' + y + '" x2="' + (marginLeft + chartWidth) + '" y2="' + y + '" stroke="#eee" />'
+                 + '<text x="' + (marginLeft - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="#666">' + val + '</text>';
+        }
+        const content = '' +
+          '<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="transparent" />' +
+          '<path d="' + d + '" fill="none" stroke="#2563eb" stroke-width="2" />' +
+          '<line x1="' + marginLeft + '" y1="' + (marginTop + chartHeight) + '" x2="' + (marginLeft + chartWidth) + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" />' +
+          xAxis + yAxis;
+        container.innerHTML = content;
+
+        // Hover tooltip on top date chart
+        try {
+          const svg = document.getElementById('chart-date-activity');
+          const xs = labels.map((_, i) => xi(i));
+          svg.onmousemove = function(e){
+            if (!pie) return;
+            const rect = svg.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            let idx = 0, best = Infinity;
+            for (let i = 0; i < xs.length; i++) { const dx = Math.abs(xs[i] - cx); if (dx < best) { best = dx; idx = i; } }
+            pie.innerHTML = '<div class="pie-title">' + labels[idx] + '</div><div class="pie-contents">건수: ' + values[idx] + '</div>';
+            pie.style.left = (e.clientX + 12) + 'px';
+            pie.style.top = (e.clientY + 12) + 'px';
+            pie.classList.remove('hidden');
+          };
+          svg.onmouseleave = function(){ if (pie) pie.classList.add('hidden'); };
+        } catch (e) {}
+      }
 
       function renderResvCodeChart() {
         const container = document.getElementById('chart-resv-code');
-        const resvCodeLabels = Object.keys(DATA.resvCodeCounts);
-        const resvCodeValues = Object.values(DATA.resvCodeCounts);
-        const maxCount = resvCodeValues.length > 0 ? Math.max(...resvCodeValues) : 0;
+        // entries: [code, count]
+        const entries = Object.entries(DATA.resvCodeCounts || {});
+        // Sort by count desc, then code asc for stability
+        entries.sort(function(a,b){
+          var ca = Number(a[1]) || 0;
+          var cb = Number(b[1]) || 0;
+          if (cb !== ca) return cb - ca;
+          return String(a[0]).localeCompare(String(b[0]));
+        });
+        const resvCodeLabels = entries.map(function(e){ return e[0]; });
+        const resvCodeValues = entries.map(function(e){ return e[1]; });
+        const maxCount = resvCodeValues.length > 0 ? Math.max.apply(null, resvCodeValues) : 0;
         const n = resvCodeLabels.length;
         const barHeight = 22;
         const barGap = 10;
@@ -684,29 +880,30 @@ function generateHtml(data, opts = {}) {
         const height = Math.max(200, marginTop + chartHeight + marginBottom);
         const chartWidth = width - marginLeft - marginRight;
 
-        container.setAttribute('height', height);
+        container.setAttribute('height', String(height));
         container.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
 
-        const xScale = (v) => (maxCount === 0 ? 0 : Math.round((v / maxCount) * chartWidth));
+        const xScale = function(v){ return (maxCount === 0 ? 0 : Math.round((v / maxCount) * chartWidth)); };
 
         const ticks = [];
         const tickCount = 5;
         for (let i = 0; i <= tickCount; i++) {
           const val = Math.round((maxCount * i) / tickCount);
           const x = marginLeft + xScale(val);
-          ticks.push({ val, x });
+          ticks.push({ val: val, x: x });
         }
 
-        const xAxisSvg = ticks.map(({ val, x }) =>
-          `<line x1="${x}" y1="${marginTop}" x2="${x}" y2="${marginTop + chartHeight}" stroke="#eee" /><text x="${x}" y="${marginTop + chartHeight + 14}" text-anchor="middle" font-size="10" fill="#666">${val}</text>`
-        ).join('');
-
-        const yLabelsSvg = resvCodeLabels.map((label, idx) => {
-          const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
-          return `<text x="${marginLeft - 8}" y="${y}" text-anchor="end" font-size="10" fill="#333">${label}</text>`;
+        const xAxisSvg = ticks.map(function(t){
+          return '<line x1="' + t.x + '" y1="' + marginTop + '" x2="' + t.x + '" y2="' + (marginTop + chartHeight) + '" stroke="#eee" />'
+               + '<text x="' + t.x + '" y="' + (marginTop + chartHeight + 14) + '" text-anchor="middle" font-size="10" fill="#666">' + t.val + '</text>';
         }).join('');
 
-        const barsSvg = resvCodeLabels.map((label, idx) => {
+        const yLabelsSvg = resvCodeLabels.map(function(label, idx){
+          const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
+          return '<text x="' + (marginLeft - 8) + '" y="' + y + '" text-anchor="end" font-size="10" fill="#333">' + label + '</text>';
+        }).join('');
+
+        const barsSvg = resvCodeLabels.map(function(label, idx){
           const y = marginTop + idx * (barHeight + barGap);
           const c = DATA.resvCodeCounts[label] || 0;
           const w = Math.max(1, xScale(c));
@@ -714,24 +911,22 @@ function generateHtml(data, opts = {}) {
           const textX = marginLeft + w / 2;
           const textY = y + barHeight / 2 + 3;
           const xEnd = marginLeft + w;
-          return `
-            <g>
-              <rect x="${marginLeft}" y="${y}" width="${w}" height="${barHeight}" fill="${color}" />
-              <text x="${textX}" y="${textY}" text-anchor="middle" font-size="10" fill="#fff">${c}</text>
-              <text x="${xEnd + 6}" y="${textY}" text-anchor="start" font-size="10" fill="#333">${c}</text>
-            </g>`;
+          return '<g>' +
+                 '<rect x="' + marginLeft + '" y="' + y + '" width="' + w + '" height="' + barHeight + '" fill="' + color + '" />' +
+                 '<text x="' + textX + '" y="' + textY + '" text-anchor="middle" font-size="10" fill="#fff">' + c + '</text>' +
+                 '<text x="' + (xEnd + 6) + '" y="' + textY + '" text-anchor="start" font-size="10" fill="#333">' + c + '</text>' +
+                 '</g>';
         }).join('');
 
-        container.innerHTML = `
-          <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
-          <text x="16" y="${marginTop + chartHeight / 2}" transform="rotate(-90 16,${marginTop + chartHeight / 2})" text-anchor="middle" font-size="12" fill="#666">예약코드</text>
-          <text x="${marginLeft + chartWidth / 2}" y="${marginTop + chartHeight + 28}" text-anchor="middle" font-size="12" fill="#666">건수</text>
-          <line x1="${marginLeft}" y1="${marginTop}" x2="${marginLeft}" y2="${marginTop + chartHeight}" stroke="#9ca3af" stroke-width="1" />
-          <line x1="${marginLeft}" y1="${marginTop + chartHeight}" x2="${marginLeft + chartWidth}" y2="${marginTop + chartHeight}" stroke="#9ca3af" stroke-width="1" />
-          ${xAxisSvg}
-          <g>${barsSvg}</g>
-          <g>${yLabelsSvg}</g>
-        `;
+        container.innerHTML = '' +
+          '<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="transparent" />' +
+          '<text x="16" y="' + (marginTop + chartHeight / 2) + '" transform="rotate(-90 16,' + (marginTop + chartHeight / 2) + ')" text-anchor="middle" font-size="12" fill="#666">예약코드</text>' +
+          '<text x="' + (marginLeft + chartWidth / 2) + '" y="' + (marginTop + chartHeight + 28) + '" text-anchor="middle" font-size="12" fill="#666">건수</text>' +
+          '<line x1="' + marginLeft + '" y1="' + marginTop + '" x2="' + marginLeft + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />' +
+          '<line x1="' + marginLeft + '" y1="' + (marginTop + chartHeight) + '" x2="' + (marginLeft + chartWidth) + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />' +
+          xAxisSvg +
+          '<g>' + barsSvg + '</g>' +
+          '<g>' + yLabelsSvg + '</g>';
       }
 
       function showAnalProduct(){
@@ -764,12 +959,13 @@ function generateHtml(data, opts = {}) {
         detail.classList.add('hidden');
         if (pageTitle) pageTitle.textContent = '상품 기반 분석';
         document.title = '상품 기반 분석 대시보드';
-        if (yAxisLabel) yAxisLabel.textContent = '상품 코드';
+        if (yAxisLabel) yAxisLabel.textContent = '상품명';
         if (ylabelsProducts) ylabelsProducts.style.display = '';
         if (ylabelsResv) ylabelsResv.style.display = 'none';
-        if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 상품 코드 (총 ' + TOTAL + ')';
+        if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 상품명 (총 ' + TOTAL + ')';
         const resvNull = document.getElementById('resv-null-summary');
         if (resvNull) resvNull.classList.add('hidden');
+        if (barsOrders) barsOrders.style.display = (toggleOrders && toggleOrders.checked) ? '' : 'none';
       }
       function showAnalResv(){
         tabAnalResv.classList.add('active');
@@ -800,6 +996,7 @@ function generateHtml(data, opts = {}) {
         if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 예약 상태 (총 ' + TOTAL + ')';
         const resvNull = document.getElementById('resv-null-summary');
         if (resvNull) resvNull.classList.remove('hidden');
+        if (barsOrders) barsOrders.style.display = 'none';
         const tabResvType = document.getElementById('tab-resv-type');
         const tabResvLang = document.getElementById('tab-resv-lang');
         const barsResvTypesG = document.getElementById('bars-resv-types');
@@ -869,6 +1066,11 @@ function generateHtml(data, opts = {}) {
       }
       if (tabProdType) tabProdType.addEventListener('click', showProdType);
       if (tabProdLang) tabProdLang.addEventListener('click', showProdLang);
+      if (toggleOrders) toggleOrders.addEventListener('change', function(){
+        if (!barsOrders) return;
+        const isProductTab = tabAnalProduct.classList.contains('active');
+        barsOrders.style.display = (isProductTab && toggleOrders.checked) ? '' : 'none';
+      });
       document.addEventListener('click', function(e){
         const t = e.target;
         if (!t || !t.closest) return;
@@ -1117,8 +1319,14 @@ function generateHtml(data, opts = {}) {
             if (!entries.length) return;
             hidePie();
             let title;
-            if (role === 'type') title = escapeHtml(prod)+' · '+escapeHtml(cat)+' → 언어';
-            else if (role === 'lang') title = escapeHtml(prod)+' · '+escapeHtml(cat)+' → 문의 유형';
+            if (role === 'type') {
+              const prodLabel = (DATA.codeNameMap && DATA.codeNameMap[prod]) ? DATA.codeNameMap[prod] : prod;
+              title = escapeHtml(prodLabel)+' · '+escapeHtml(cat)+' → 언어';
+            }
+            else if (role === 'lang') {
+              const prodLabel = (DATA.codeNameMap && DATA.codeNameMap[prod]) ? DATA.codeNameMap[prod] : prod;
+              title = escapeHtml(prodLabel)+' · '+escapeHtml(cat)+' → 문의 유형';
+            }
             else {
               const mode = (document.getElementById('bars-resv-types') && document.getElementById('bars-resv-types').style.display !== 'none') ? '언어' : '문의 유형';
               title = escapeHtml(status)+' · '+escapeHtml(cat)+' → ' + mode;
@@ -1134,6 +1342,204 @@ function generateHtml(data, opts = {}) {
       }
 
       attachHover();
+      attachProductLabelClick();
+      function attachProductLabelClick(){
+        const nodes = document.querySelectorAll('#ylabels-products .prod-label');
+        nodes.forEach((el) => {
+          el.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const prod = el.getAttribute('data-prod');
+            showProductTooltip(prod, el);
+          });
+        });
+      }
+
+      function showProductTooltip(prod, srcEl){
+        if (!prodTip) return;
+        const name = (DATA.codeNameMap && DATA.codeNameMap[prod]) ? DATA.codeNameMap[prod] : prod;
+        const entriesObj = (DATA.perProductDateCounts && DATA.perProductDateCounts[prod]) ? DATA.perProductDateCounts[prod] : {};
+        const chartEl = document.getElementById('chart');
+        const chartRect = chartEl ? chartEl.getBoundingClientRect() : { left: 20, width: ${width} };
+        const width = Math.round(chartRect.width);
+        const titleHtml = '<div class="product-tooltip-title">' + (name ? name : prod) + '</div>';
+        const tabsHtml = '<div id="tabs-date2" class="tabs" role="tablist" style="margin:0 0 6px auto;">' +
+          '<button id="tab2-date-d" class="tab active" role="tab" aria-selected="true">일 기준</button>'+
+          '<button id="tab2-date-m" class="tab" role="tab" aria-selected="false">월 기준</button>'+
+          '<button id="tab2-date-q" class="tab" role="tab" aria-selected="false">분기 기준</button>'+
+          '<button id="tab2-date-h" class="tab" role="tab" aria-selected="false">반기 기준</button>'+
+          '<button id="tab2-date-y" class="tab" role="tab" aria-selected="false">연 기준</button>'+
+        '</div>';
+        const head = '<div class="product-tooltip-meta">상품코드: ' + prod + '</div>';
+        const svgHtml = '<div class="product-tooltip-chart"><svg id="chart-date-activity2" width="'+width+'" height="220" viewBox="0 0 '+width+' 220"></svg></div>';
+        const closeBtn = '<button class="bar-detail-close" style="position:absolute; top:10px; right:10px;">닫기</button>';
+        prodTip.style.width = width + 'px';
+        prodTip.innerHTML = titleHtml + closeBtn + tabsHtml + head + svgHtml;
+        // Position near clicked label and keep within viewport (fixed positioning)
+        const vpW = window.innerWidth || document.documentElement.clientWidth || 1280;
+        const vpH = window.innerHeight || document.documentElement.clientHeight || 800;
+        const r = (srcEl && srcEl.getBoundingClientRect) ? srcEl.getBoundingClientRect() : { left: chartRect.left, top: 80, bottom: 120 };
+        prodTip.classList.remove('hidden');
+        // initial measure
+        let tipRect = prodTip.getBoundingClientRect();
+        let left = Math.max(10, Math.round(chartRect.left));
+        if (left + tipRect.width + 10 > vpW) left = Math.max(10, vpW - tipRect.width - 10);
+        // Prefer above the label; fallback to below if not enough space
+        let top = Math.round(r.top - 10 - tipRect.height);
+        if (top < 10) top = Math.min(vpH - tipRect.height - 10, Math.round(r.bottom + 10));
+        if (top < 10) top = 10;
+        prodTip.style.left = left + 'px';
+        prodTip.style.top = top + 'px';
+        // re-measure and clamp horizontally if needed
+        tipRect = prodTip.getBoundingClientRect();
+        if (tipRect.right > vpW - 10) {
+          left = Math.max(10, vpW - tipRect.width - 10);
+          prodTip.style.left = left + 'px';
+        }
+        const btnClose = prodTip.querySelector('.bar-detail-close');
+        if (btnClose) btnClose.addEventListener('click', hideProductTip);
+        // Outside click closes
+        setTimeout(() => {
+          function outside(ev){
+            if (!prodTip.contains(ev.target) && !(ev.target && ev.target.closest && ev.target.closest('.prod-label'))) {
+              document.removeEventListener('click', outside, true);
+              hideProductTip();
+            }
+          }
+          document.addEventListener('click', outside, true);
+        }, 0);
+
+        function group(entries, mode){
+          function pad2(n){ return (n < 10 ? '0' : '') + n; }
+          const map = new Map();
+          for (const [d, c0] of entries) {
+            const c = Number(c0) || 0;
+            const y = Number(String(d).slice(0,4));
+            const m = Number(String(d).slice(5,7));
+            let key = d;
+            if (mode === 'm') key = y + '-' + pad2(m);
+            else if (mode === 'q') { const q = Math.floor((m-1)/3)+1; key = y + '-Q' + q; }
+            else if (mode === 'h') { const h = (m <= 6) ? 'H1' : 'H2'; key = y + '-' + h; }
+            else if (mode === 'y') key = String(y);
+            map.set(key, (map.get(key) || 0) + c);
+          }
+          let labels = Array.from(map.keys());
+          labels.sort((a,b)=>{
+            if (mode === 'd' || mode === 'm' || mode === 'y') return String(a).localeCompare(String(b));
+            const ay = Number(String(a).slice(0,4));
+            const by = Number(String(b).slice(0,4));
+            if (ay !== by) return ay - by;
+            if (mode === 'q') {
+              const aq = Number(String(a).match(/Q(\d)/)?.[1] || 0);
+              const bq = Number(String(b).match(/Q(\d)/)?.[1] || 0);
+              return aq - bq;
+            } else {
+              const ah = String(a).includes('H1') ? 1 : 2;
+              const bh = String(b).includes('H1') ? 1 : 2;
+              return ah - bh;
+            }
+          });
+          // If daily mode, fill missing days with 0 to reflect gaps between events
+          if (mode === 'd' && labels.length >= 2) {
+            const start = new Date(labels[0]);
+            const end = new Date(labels[labels.length - 1]);
+            const full = [];
+            for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
+              const y = dt.getFullYear();
+              const m = pad2(dt.getMonth() + 1);
+              const day = pad2(dt.getDate());
+              full.push(y + '-' + m + '-' + day);
+            }
+            labels = full;
+          }
+          const vals = labels.map(l => map.get(l) || 0);
+          return { labels, values: vals };
+        }
+
+        function render(mode){
+          const svg = document.getElementById('chart-date-activity2');
+          if (!svg) return;
+          const entries = Object.entries(entriesObj);
+          if (!entries.length) { svg.innerHTML = '<text x="20" y="40" fill="#666" font-size="12">데이터 없음</text>'; return; }
+          const g = group(entries, mode);
+          const labels = g.labels;
+          const values = g.values;
+          const width = Math.round(chartRect.width);
+          const height = 220;
+          const marginLeft = 50, marginRight = 20, marginTop = 20, marginBottom = 28;
+          const chartWidth = width - marginLeft - marginRight;
+          const chartHeight = height - marginTop - marginBottom;
+          const maxVal = values.length ? Math.max.apply(null, values) : 0;
+          const xi = function(i){ if (labels.length <= 1) return marginLeft; return marginLeft + Math.round((i/(labels.length-1)) * chartWidth); };
+          const yi = function(v){ if (maxVal === 0) return marginTop + chartHeight; return marginTop + (chartHeight - Math.round((v/maxVal) * chartHeight)); };
+          let d = '';
+          for (let i = 0; i < labels.length; i++) { const x = xi(i), y = yi(values[i]); d += (i === 0 ? 'M ' : ' L ') + x + ' ' + y; }
+          const ticks = 5;
+          let xAxis = '';
+          for (let i = 0; i <= ticks; i++) { const idx = Math.round((labels.length - 1) * (i / ticks)); const x = xi(idx); xAxis += '<line x1="'+x+'" y1="'+(marginTop+chartHeight)+'" x2="'+x+'" y2="'+(marginTop+chartHeight+4)+'" stroke="#9ca3af" />' + '<text x="'+x+'" y="'+(marginTop+chartHeight+16)+'" text-anchor="middle" font-size="10" fill="#666">'+labels[idx]+'</text>'; }
+          let yAxis = '';
+          for (let i = 0; i <= ticks; i++) { const val = Math.round((maxVal * i) / ticks); const y = yi(val); yAxis += '<line x1="'+marginLeft+'" y1="'+y+'" x2="'+(marginLeft+chartWidth)+'" y2="'+y+'" stroke="#eee" />' + '<text x="'+(marginLeft-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="10" fill="#666">'+val+'</text>'; }
+          svg.innerHTML = '<rect x="0" y="0" width="'+width+'" height="'+height+'" fill="transparent" />' + '<path d="'+d+'" fill="none" stroke="#2563eb" stroke-width="2" />' + '<line x1="'+marginLeft+'" y1="'+(marginTop+chartHeight)+'" x2="'+(marginLeft+chartWidth)+'" y2="'+(marginTop+chartHeight)+'" stroke="#9ca3af" />' + xAxis + yAxis;
+          // Hover tooltip on product detail chart
+          const xs = labels.map((_, i) => xi(i));
+          svg.onmousemove = function(e){
+            if (!pie) return;
+            const rect = svg.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            let idx = 0, best = Infinity;
+            for (let i = 0; i < xs.length; i++) { const dx = Math.abs(xs[i] - cx); if (dx < best) { best = dx; idx = i; } }
+            pie.innerHTML = '<div class="pie-title">' + labels[idx] + '</div><div class="pie-contents">건수: ' + values[idx] + '</div>';
+            pie.style.left = (e.clientX + 12) + 'px';
+            pie.style.top = (e.clientY + 12) + 'px';
+            pie.classList.remove('hidden');
+          };
+          svg.onmouseleave = function(){ if (pie) pie.classList.add('hidden'); };
+        }
+
+        function setMode(mode){
+          const ids = [['d','tab2-date-d'],['m','tab2-date-m'],['q','tab2-date-q'],['h','tab2-date-h'],['y','tab2-date-y']];
+          ids.forEach(([k,id])=>{ const el = document.getElementById(id); if (el){ const on = (k===mode); el.classList.toggle('active', on); el.setAttribute('aria-selected', on?'true':'false'); }});
+          render(mode);
+        }
+        const td = document.getElementById('tab2-date-d');
+        const tm = document.getElementById('tab2-date-m');
+        const tq = document.getElementById('tab2-date-q');
+        const th = document.getElementById('tab2-date-h');
+        const ty = document.getElementById('tab2-date-y');
+        if (td) td.addEventListener('click', ()=>setMode('d'));
+        if (tm) tm.addEventListener('click', ()=>setMode('m'));
+        if (tq) tq.addEventListener('click', ()=>setMode('q'));
+        if (th) th.addEventListener('click', ()=>setMode('h'));
+        if (ty) ty.addEventListener('click', ()=>setMode('y'));
+        setMode('d');
+      }
+      // Date granularity tabs
+      function setDateMode(mode) {
+        const tabs = [
+          ['d', document.getElementById('tab-date-d')],
+          ['m', document.getElementById('tab-date-m')],
+          ['q', document.getElementById('tab-date-q')],
+          ['h', document.getElementById('tab-date-h')],
+          ['y', document.getElementById('tab-date-y')],
+        ];
+        tabs.forEach(([k, el]) => {
+          if (!el) return;
+          const on = (k === mode);
+          el.classList.toggle('active', on);
+          el.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        renderDateActivity(mode);
+      }
+      const tbD = document.getElementById('tab-date-d');
+      const tbM = document.getElementById('tab-date-m');
+      const tbQ = document.getElementById('tab-date-q');
+      const tbH = document.getElementById('tab-date-h');
+      const tbY = document.getElementById('tab-date-y');
+      if (tbD) tbD.addEventListener('click', () => setDateMode('d'));
+      if (tbM) tbM.addEventListener('click', () => setDateMode('m'));
+      if (tbQ) tbQ.addEventListener('click', () => setDateMode('q'));
+      if (tbH) tbH.addEventListener('click', () => setDateMode('h'));
+      if (tbY) tbY.addEventListener('click', () => setDateMode('y'));
+      setDateMode('d');
       showAnalProduct();
     })();
   </script>
