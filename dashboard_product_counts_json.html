@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>상품 기반 분석 대시보드</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; margin: 20px; color: #222; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 12px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .muted { color: #6b7280; font-size: 12px; }
+    .scroll-y { overflow-y: auto; max-height: 600px; position: relative; }
+    .legend { display:flex; flex-wrap:wrap; justify-content:center; gap: 10px 18px; padding-top: 10px; }
+    .legend-item { display:flex; align-items:center; gap:8px; font-size:12px; color:#444; }
+    .swatch { width:12px; height:12px; border-radius:3px; display:inline-block; }
+    .tabs { display:flex; gap:8px; margin: 10px 0 6px; }
+    .tab { padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:12px; cursor:pointer; }
+    .tab.active { background:#111827; color:#fff; border-color:#111827; }
+    .hidden { display:none; }
+    .pie-tooltip { position: fixed; z-index: 1000; background:#fff; color:#111; border:1px solid #e5e7eb; border-radius:10px; padding:10px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 320px; max-width: 90vw; }
+    .bar-detail { position:absolute; z-index: 2; background:#fff; color:#111; border:1px solid #e5e7eb; border-radius:10px; padding:12px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); width: 720px; max-width: calc(100% - 140px); }
+    .bar-detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .bar-detail-title { font-size:13px; font-weight:600; color:#374151; }
+    .bar-detail-close { font-size:12px; color:#6b7280; background:transparent; border:none; cursor:pointer; padding:4px 6px; }
+    .bar-detail-body { max-height: 380px; overflow-y: auto; padding-right: 4px; }
+    .pie-title { font-size:12px; color:#374151; margin-bottom:6px; }
+    .pie-legend { display:flex; flex-wrap:wrap; gap:8px 12px; margin-top:8px; }
+    .pie-legend-item { display:flex; align-items:center; gap:6px; font-size:11px; color:#444; }
+    .pie-contents { margin-top:10px; border-top:1px dashed #e5e7eb; padding-top:8px; }
+    .pie-contents-title { font-size:12px; color:#374151; margin-bottom:6px; }
+    .pie-contents-list { max-height: 140px; overflow:auto; display:block; }
+    .pie-contents-list li { font-size:11px; color:#374151; line-height:1.4; margin: 0 0 4px 16px; }
+    .ratios { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #e5e7eb; }
+    .ratios-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 12px; max-height: 260px; overflow-y: auto; }
+    .ratio-item { font-size: 12px; color:#374151; display:flex; align-items:center; gap:6px; }
+    .ratio-code { font-weight:600; color:#111827; }
+    .ratio-val { min-width: 64px; text-align:right; font-variant-numeric: tabular-nums; }
+    .ratio-detail { color:#6b7280; font-size:11px; }
+    .lang-type-section { margin-top: 14px; }
+    .lang-type-title { font-size:12px; color:#374151; margin-bottom:6px; }
+    .lt-cards { display:flex; gap:12px; overflow-x:auto; padding-bottom: 4px; }
+    .lt-card { min-width: 200px; border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff; }
+    .lt-card-title { font-size:12px; font-weight:600; color:#374151; margin-bottom:6px; }
+    .lt-list { display:flex; flex-direction:column; gap:4px; }
+    .lt-item { font-size:12px; color:#374151; }
+  </style>
+  <meta name="color-scheme" content="light dark">
+  <style media="(prefers-color-scheme: dark)">
+    body { background: #0b0f19; color: #e5e7eb; }
+    .card { background: #0d1323; border-color: #1f2937; }
+    .muted { color: #9ca3af; }
+    .legend-item { color:#d1d5db; }
+    .tab { background:#0d1323; border-color:#1f2937; color:#d1d5db; }
+    .tab.active { background:#2563eb; border-color:#2563eb; color:#fff; }
+    .pie-tooltip { background:#0d1323; color:#e5e7eb; border-color:#1f2937; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+    .pie-title { color:#d1d5db; }
+    .pie-legend-item { color:#d1d5db; }
+    .pie-contents { border-top-color:#1f2937; }
+    .pie-contents-title { color:#d1d5db; }
+    .pie-contents-list li { color:#d1d5db; }
+    .bar-detail { background:#0d1323; color:#e5e7eb; border-color:#1f2937; box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
+    .bar-detail-title { color:#e5e7eb; }
+    .bar-detail-close { color:#9ca3af; }
+    .pie-tooltip { background:#0d1323; color:#e5e7eb; border-color:#1f2937; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+    .pie-title { color:#d1d5db; }
+    .pie-legend-item { color:#d1d5db; }
+    .ratios { border-top-color:#1f2937; }
+    .ratio-item { color:#d1d5db; }
+    .ratio-code { color:#e5e7eb; }
+    .ratio-detail { color:#9ca3af; }
+    .lang-type-title { color:#d1d5db; }
+    .lt-card { background:#0d1323; border-color:#1f2937; }
+    .lt-card-title { color:#e5e7eb; }
+    .lt-item { color:#d1d5db; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="page-title">상품 기반 분석</h1>
+    <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품 코드 (총 39)</div>
+    <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px;">
+      <button id="tab-anal-product" class="tab active" role="tab" aria-selected="true">상품 기반 분석</button>
+      <button id="tab-anal-resv" class="tab" role="tab" aria-selected="false">예약 기반 분석</button>
+      
+    </div>
+    <div id="resv-null-summary" class="muted hidden" style="margin: 6px 0 2px;">비예약 문의 비율: 5.13%</div>
+    <div id="tabs-dimension" class="tabs" role="tablist">
+      <button id="tab-type" class="tab active" role="tab" aria-selected="true">문의 유형</button>
+      <button id="tab-lang" class="tab" role="tab" aria-selected="false">언어</button>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div class="scroll-y" id="scroll-products">
+      <div id="tabs-prod-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px;">
+        <button id="tab-prod-type" class="tab active" role="tab" aria-selected="true">문의 유형</button>
+        <button id="tab-prod-lang" class="tab" role="tab" aria-selected="false">언어</button>
+      </div>
+      <svg id="chart" width="1000" height="1116" viewBox="0 0 1000 1116" data-ml="100" data-barh="22">
+        <rect x="0" y="0" width="1000" height="1116" fill="transparent" />
+        <!-- Y axis label (dynamic) -->
+        <text id="y-axis-label" x="16" y="553" transform="rotate(-90 16,553)" text-anchor="middle" font-size="12" fill="#666">상품 코드</text>
+        <!-- X axis label (건수) -->
+        <text x="530" y="1104" text-anchor="middle" font-size="12" fill="#666">건수</text>
+        <!-- Axes lines -->
+        <line x1="100" y1="30" x2="100" y2="1076" stroke="#9ca3af" stroke-width="1" />
+        <line x1="100" y1="1076" x2="960" y2="1076" stroke="#9ca3af" stroke-width="1" />
+        <!-- Grid + X ticks -->
+        <line x1="100" y1="30" x2="100" y2="1076" stroke="#eee" />
+<text x="100" y="1090" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="315" y1="30" x2="315" y2="1076" stroke="#eee" />
+<text x="315" y="1090" text-anchor="middle" font-size="10" fill="#666">1</text><line x1="530" y1="30" x2="530" y2="1076" stroke="#eee" />
+<text x="530" y="1090" text-anchor="middle" font-size="10" fill="#666">2</text><line x1="530" y1="30" x2="530" y2="1076" stroke="#eee" />
+<text x="530" y="1090" text-anchor="middle" font-size="10" fill="#666">2</text><line x1="745" y1="30" x2="745" y2="1076" stroke="#eee" />
+<text x="745" y="1090" text-anchor="middle" font-size="10" fill="#666">3</text><line x1="960" y1="30" x2="960" y2="1076" stroke="#eee" />
+<text x="960" y="1090" text-anchor="middle" font-size="10" fill="#666">4</text>
+        <!-- Bars (stacked by 문의 유형) -->
+        <g id="bars-type">
+        <g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="11653" data-cat="변경취소__단순변심" x="100" y="30" width="430" height="22" fill="#f28e2b" />
+        <text x="315" y="44" text-anchor="middle" font-size="10" fill="#111">2</text>
+
+        <rect class="seg seg-type" data-role="type" data-prod="11653" data-cat="변경취소__옵션변경" x="530" y="30" width="215" height="22" fill="#76b7b2" />
+        <text x="637.5" y="44" text-anchor="middle" font-size="10" fill="#111">1</text>
+
+        <rect class="seg seg-type" data-role="type" data-prod="11653" data-cat="변경취소__날짜시간변경" x="745" y="30" width="215" height="22" fill="#edc949" />
+        <text x="852.5" y="44" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="966" y="44" text-anchor="start" font-size="10" fill="#333">4 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13165" data-cat="서비스__정보" x="100" y="62" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="76" text-anchor="middle" font-size="10" fill="#111">1</text>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13165" data-cat="변경취소__단순변심" x="315" y="62" width="215" height="22" fill="#f28e2b" />
+        <text x="422.5" y="76" text-anchor="middle" font-size="10" fill="#111">1</text>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13165" data-cat="예약/주문__기타" x="530" y="62" width="215" height="22" fill="#af7aa1" />
+        <text x="637.5" y="76" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="751" y="76" text-anchor="start" font-size="10" fill="#333">3 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13806" data-cat="변경취소__단순변심" x="100" y="94" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="108" text-anchor="middle" font-size="10" fill="#111">1</text>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13806" data-cat="예약/주문__상품구매가능여부" x="315" y="94" width="215" height="22" fill="#ff9da7" />
+        <text x="422.5" y="108" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="536" y="108" text-anchor="start" font-size="10" fill="#333">2 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="373" data-cat="예약/주문__기타" x="100" y="126" width="215" height="22" fill="#af7aa1" />
+        <text x="207.5" y="140" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="140" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="11230" data-cat="서비스__정보" x="100" y="158" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="172" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="172" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="11559" data-cat="서비스__정보" x="100" y="190" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="204" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="204" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="12382" data-cat="예약/주문__상품구매가능여부" x="100" y="222" width="215" height="22" fill="#ff9da7" />
+        <text x="207.5" y="236" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="236" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="12878" data-cat="변경취소__단순변심" x="100" y="254" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="268" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="268" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="12948" data-cat="예약/주문__수령방법" x="100" y="286" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="300" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="300" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13043" data-cat="서비스__정보" x="100" y="318" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="332" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="332" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13261" data-cat="서비스__정보" x="100" y="350" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="364" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="364" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13266" data-cat="변경취소__단순변심" x="100" y="382" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="396" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="396" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13772" data-cat="변경취소__옵션변경" x="100" y="414" width="215" height="22" fill="#76b7b2" />
+        <text x="207.5" y="428" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="428" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13782" data-cat="서비스__정보" x="100" y="446" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="460" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="460" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="13896" data-cat="기타" x="100" y="478" width="215" height="22" fill="#59a14f" />
+        <text x="207.5" y="492" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="492" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14169" data-cat="서비스__정보" x="100" y="510" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="524" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="524" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14201" data-cat="예약/주문__옵션변경/상품추가" x="100" y="542" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="556" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="556" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14278" data-cat="서비스__정보" x="100" y="574" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="588" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="588" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14309" data-cat="예약/주문__옵션변경/상품추가" x="100" y="606" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="620" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="620" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14365" data-cat="변경취소__날짜시간변경" x="100" y="638" width="215" height="22" fill="#edc949" />
+        <text x="207.5" y="652" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="652" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14398" data-cat="변경취소__단순변심" x="100" y="670" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="684" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="684" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14413" data-cat="예약/주문__처리상황" x="100" y="702" width="215" height="22" fill="#9c755f" />
+        <text x="207.5" y="716" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="716" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14426" data-cat="변경취소__옵션변경" x="100" y="734" width="215" height="22" fill="#76b7b2" />
+        <text x="207.5" y="748" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="748" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14523" data-cat="예약/주문__옵션변경/상품추가" x="100" y="766" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="780" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="780" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14604" data-cat="서비스__정보" x="100" y="798" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="812" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="812" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14681" data-cat="결제환불__환불절차" x="100" y="830" width="215" height="22" fill="#bab0ab" />
+        <text x="207.5" y="844" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="844" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14687" data-cat="서비스__정보" x="100" y="862" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="876" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="876" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="14822" data-cat="예약/주문__옵션변경/상품추가" x="100" y="894" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="908" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="908" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="15009" data-cat="예약/주문__처리상황" x="100" y="926" width="215" height="22" fill="#9c755f" />
+        <text x="207.5" y="940" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="940" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="15032" data-cat="변경취소__단순변심" x="100" y="958" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="972" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="972" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="15078" data-cat="서비스__정보" x="100" y="990" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="1004" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1004" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="15104" data-cat="예약/주문__수령/주문정보변경" x="100" y="1022" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="1036" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1036" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-type" data-role="type" data-prod="83044" data-cat="기타" x="100" y="1054" width="215" height="22" fill="#59a14f" />
+        <text x="207.5" y="1068" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1068" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g>
+        </g>
+        <!-- Bars (stacked by 언어) -->
+        <g id="bars-lang" style="display:none">
+        <g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="11653" data-cat="ja" x="100" y="30" width="860" height="22" fill="#f28e2b" />
+        <text x="530" y="44" text-anchor="middle" font-size="10" fill="#111">4</text>
+<text x="966" y="44" text-anchor="start" font-size="10" fill="#333">4 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13165" data-cat="zh-TW" x="100" y="62" width="645" height="22" fill="#4e79a7" />
+        <text x="422.5" y="76" text-anchor="middle" font-size="10" fill="#111">3</text>
+<text x="751" y="76" text-anchor="start" font-size="10" fill="#333">3 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13806" data-cat="zh-TW" x="100" y="94" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="108" text-anchor="middle" font-size="10" fill="#111">1</text>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13806" data-cat="zh-CN" x="315" y="94" width="215" height="22" fill="#76b7b2" />
+        <text x="422.5" y="108" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="536" y="108" text-anchor="start" font-size="10" fill="#333">2 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="373" data-cat="en" x="100" y="126" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="140" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="140" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="11230" data-cat="zh-TW" x="100" y="158" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="172" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="172" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="11559" data-cat="zh-TW" x="100" y="190" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="204" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="204" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="12382" data-cat="zh-HK" x="100" y="222" width="215" height="22" fill="#59a14f" />
+        <text x="207.5" y="236" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="236" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="12878" data-cat="zh-TW" x="100" y="254" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="268" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="268" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="12948" data-cat="zh-CN" x="100" y="286" width="215" height="22" fill="#76b7b2" />
+        <text x="207.5" y="300" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="300" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13043" data-cat="zh-TW" x="100" y="318" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="332" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="332" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13261" data-cat="zh-TW" x="100" y="350" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="364" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="364" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13266" data-cat="zh-CN" x="100" y="382" width="215" height="22" fill="#76b7b2" />
+        <text x="207.5" y="396" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="396" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13772" data-cat="en" x="100" y="414" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="428" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="428" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13782" data-cat="en" x="100" y="446" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="460" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="460" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="13896" data-cat="en" x="100" y="478" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="492" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="492" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14169" data-cat="ja" x="100" y="510" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="524" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="524" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14201" data-cat="zh-TW" x="100" y="542" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="556" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="556" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14278" data-cat="zh-TW" x="100" y="574" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="588" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="588" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14309" data-cat="ja" x="100" y="606" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="620" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="620" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14365" data-cat="en" x="100" y="638" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="652" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="652" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14398" data-cat="en" x="100" y="670" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="684" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="684" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14413" data-cat="ja" x="100" y="702" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="716" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="716" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14426" data-cat="zh-HK" x="100" y="734" width="215" height="22" fill="#59a14f" />
+        <text x="207.5" y="748" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="748" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14523" data-cat="en" x="100" y="766" width="215" height="22" fill="#e15759" />
+        <text x="207.5" y="780" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="780" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14604" data-cat="zh-TW" x="100" y="798" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="812" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="812" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14681" data-cat="ja" x="100" y="830" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="844" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="844" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14687" data-cat="ja" x="100" y="862" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="876" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="876" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="14822" data-cat="ja" x="100" y="894" width="215" height="22" fill="#f28e2b" />
+        <text x="207.5" y="908" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="908" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="15009" data-cat="zh-TW" x="100" y="926" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="940" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="940" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="15032" data-cat="zh-TW" x="100" y="958" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="972" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="972" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="15078" data-cat="zh-TW" x="100" y="990" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="1004" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1004" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="15104" data-cat="zh-TW" x="100" y="1022" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="1036" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1036" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g><g>
+
+        <rect class="seg seg-lang" data-role="lang" data-prod="83044" data-cat="zh-TW" x="100" y="1054" width="215" height="22" fill="#4e79a7" />
+        <text x="207.5" y="1068" text-anchor="middle" font-size="10" fill="#111">1</text>
+<text x="321" y="1068" text-anchor="start" font-size="10" fill="#333">1 · 상품 문의 0</text>
+      </g>
+        </g>
+        <!-- Bars (stacked by 예약 상태; 문의 유형 스택) -->
+        <g id="bars-resv" style="display:none">
+        
+        </g>
+        <!-- Bars (per product, stacked by 예약 상태) -->
+        <g id="bars-resv-product" style="display:none">
+        <g>
+<text x="966" y="44" text-anchor="start" font-size="10" fill="#333">4</text>
+      </g><g>
+<text x="751" y="76" text-anchor="start" font-size="10" fill="#333">3</text>
+      </g><g>
+<text x="536" y="108" text-anchor="start" font-size="10" fill="#333">2</text>
+      </g><g>
+<text x="321" y="140" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="172" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="204" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="236" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="268" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="300" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="332" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="364" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="396" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="428" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="460" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="492" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="524" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="556" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="588" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="620" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="652" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="684" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="716" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="748" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="780" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="812" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="844" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="876" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="908" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="940" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="972" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="1004" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="1036" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g><g>
+<text x="321" y="1068" text-anchor="start" font-size="10" fill="#333">1</text>
+      </g>
+        </g>
+        <!-- Y labels (product codes) -->
+        <g id="ylabels-products"><text x="92" y="44" text-anchor="end" font-size="10" fill="#333">11653</text><text x="92" y="76" text-anchor="end" font-size="10" fill="#333">13165</text><text x="92" y="108" text-anchor="end" font-size="10" fill="#333">13806</text><text x="92" y="140" text-anchor="end" font-size="10" fill="#333">373</text><text x="92" y="172" text-anchor="end" font-size="10" fill="#333">11230</text><text x="92" y="204" text-anchor="end" font-size="10" fill="#333">11559</text><text x="92" y="236" text-anchor="end" font-size="10" fill="#333">12382</text><text x="92" y="268" text-anchor="end" font-size="10" fill="#333">12878</text><text x="92" y="300" text-anchor="end" font-size="10" fill="#333">12948</text><text x="92" y="332" text-anchor="end" font-size="10" fill="#333">13043</text><text x="92" y="364" text-anchor="end" font-size="10" fill="#333">13261</text><text x="92" y="396" text-anchor="end" font-size="10" fill="#333">13266</text><text x="92" y="428" text-anchor="end" font-size="10" fill="#333">13772</text><text x="92" y="460" text-anchor="end" font-size="10" fill="#333">13782</text><text x="92" y="492" text-anchor="end" font-size="10" fill="#333">13896</text><text x="92" y="524" text-anchor="end" font-size="10" fill="#333">14169</text><text x="92" y="556" text-anchor="end" font-size="10" fill="#333">14201</text><text x="92" y="588" text-anchor="end" font-size="10" fill="#333">14278</text><text x="92" y="620" text-anchor="end" font-size="10" fill="#333">14309</text><text x="92" y="652" text-anchor="end" font-size="10" fill="#333">14365</text><text x="92" y="684" text-anchor="end" font-size="10" fill="#333">14398</text><text x="92" y="716" text-anchor="end" font-size="10" fill="#333">14413</text><text x="92" y="748" text-anchor="end" font-size="10" fill="#333">14426</text><text x="92" y="780" text-anchor="end" font-size="10" fill="#333">14523</text><text x="92" y="812" text-anchor="end" font-size="10" fill="#333">14604</text><text x="92" y="844" text-anchor="end" font-size="10" fill="#333">14681</text><text x="92" y="876" text-anchor="end" font-size="10" fill="#333">14687</text><text x="92" y="908" text-anchor="end" font-size="10" fill="#333">14822</text><text x="92" y="940" text-anchor="end" font-size="10" fill="#333">15009</text><text x="92" y="972" text-anchor="end" font-size="10" fill="#333">15032</text><text x="92" y="1004" text-anchor="end" font-size="10" fill="#333">15078</text><text x="92" y="1036" text-anchor="end" font-size="10" fill="#333">15104</text><text x="92" y="1068" text-anchor="end" font-size="10" fill="#333">83044</text></g>
+        <!-- Y labels (reservation statuses) -->
+        <g id="ylabels-resv" style="display:none"></g>
+      </svg>
+      <div id="bar-detail" class="bar-detail hidden"></div>
+      </div>
+      <!-- Reservation analysis compact chart -->
+      <div class="scroll-y hidden" id="scroll-resv">
+        <div id="tabs-resv-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px;">
+          <button id="tab-resv-type" class="tab active" role="tab" aria-selected="true">문의 유형</button>
+          <button id="tab-resv-lang" class="tab" role="tab" aria-selected="false">언어</button>
+        </div>
+        <svg id="chart-resv" width="1000" height="160" viewBox="0 0 1000 160">
+          <rect x="0" y="0" width="1000" height="160" fill="transparent" />
+          <text x="16" y="30" transform="rotate(-90 16,30)" text-anchor="middle" font-size="12" fill="#666">예약 상태</text>
+          <text x="530" y="58" text-anchor="middle" font-size="12" fill="#666">건수</text>
+          <line x1="100" y1="30" x2="100" y2="30" stroke="#9ca3af" stroke-width="1" />
+          <line x1="100" y1="30" x2="960" y2="30" stroke="#9ca3af" stroke-width="1" />
+          <line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text><line x1="100" y1="30" x2="100" y2="30" stroke="#eee" />
+<text x="100" y="44" text-anchor="middle" font-size="10" fill="#666">0</text>
+          <g id="bars-resv-types"></g>
+          <g id="bars-resv-langs" style="display:none"></g>
+        
+        </svg>
+      </div>
+      <div id="legend-type" class="legend"><div class="legend-item"><span class="swatch" style="background:#4e79a7"></span><span>서비스__정보</span></div><div class="legend-item"><span class="swatch" style="background:#f28e2b"></span><span>변경취소__단순변심</span></div><div class="legend-item"><span class="swatch" style="background:#e15759"></span><span>예약/주문__옵션변경/상품추가</span></div><div class="legend-item"><span class="swatch" style="background:#76b7b2"></span><span>변경취소__옵션변경</span></div><div class="legend-item"><span class="swatch" style="background:#59a14f"></span><span>기타</span></div><div class="legend-item"><span class="swatch" style="background:#edc949"></span><span>변경취소__날짜시간변경</span></div><div class="legend-item"><span class="swatch" style="background:#af7aa1"></span><span>예약/주문__기타</span></div><div class="legend-item"><span class="swatch" style="background:#ff9da7"></span><span>예약/주문__상품구매가능여부</span></div><div class="legend-item"><span class="swatch" style="background:#9c755f"></span><span>예약/주문__처리상황</span></div><div class="legend-item"><span class="swatch" style="background:#bab0ab"></span><span>결제환불__환불절차</span></div><div class="legend-item"><span class="swatch" style="background:#4e79a7"></span><span>예약/주문__수령/주문정보변경</span></div><div class="legend-item"><span class="swatch" style="background:#f28e2b"></span><span>예약/주문__수령방법</span></div></div>
+      <div id="legend-lang" class="legend hidden"><div class="legend-item"><span class="swatch" style="background:#4e79a7"></span><span>zh-TW</span></div><div class="legend-item"><span class="swatch" style="background:#f28e2b"></span><span>ja</span></div><div class="legend-item"><span class="swatch" style="background:#e15759"></span><span>en</span></div><div class="legend-item"><span class="swatch" style="background:#76b7b2"></span><span>zh-CN</span></div><div class="legend-item"><span class="swatch" style="background:#59a14f"></span><span>zh-HK</span></div></div>
+      <div id="legend-resv" class="legend hidden"></div>
+    </div>
+    <!-- Separated: Reservation ratios section (outside chart card) -->
+    <div id="resv-ratios-card" class="card hidden" style="margin-top:12px;">
+      <div class="muted" style="margin-bottom:6px;">상품 별 주문 대비 문의 비율</div>
+      <div id="resv-ratios" class="ratios">
+        <div class="ratios-grid"><div class="ratio-item"><span class="ratio-code">11653</span><span class="ratio-val">-</span><span class="ratio-detail">(4/0)</span></div><div class="ratio-item"><span class="ratio-code">13165</span><span class="ratio-val">-</span><span class="ratio-detail">(3/0)</span></div><div class="ratio-item"><span class="ratio-code">13806</span><span class="ratio-val">-</span><span class="ratio-detail">(2/0)</span></div><div class="ratio-item"><span class="ratio-code">373</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">11230</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">11559</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">12382</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">12878</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">12948</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13043</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13261</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13266</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13772</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13782</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">13896</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14169</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14201</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14278</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14309</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14365</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14398</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14413</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14426</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14523</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14604</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14681</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14687</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">14822</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">15009</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">15032</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">15078</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">15104</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div><div class="ratio-item"><span class="ratio-code">83044</span><span class="ratio-val">-</span><span class="ratio-detail">(1/0)</span></div></div>
+      </div>
+    </div>
+    <div id="resv-langtype-card" class="card hidden" style="margin-top:12px;">
+      <div class="muted" style="margin-bottom:6px;">언어별 문의 유형 분포</div>
+      <div class="lang-type-section">
+        <div class="lt-cards"><div class="lt-card"><div class="lt-card-title">zh-TW</div><div class="lt-list"><div class="lt-item">1위 - 서비스__정보 (47%)</div><div class="lt-item">2위 - 변경취소__단순변심 (18%)</div><div class="lt-item">3위 - 예약/주문__옵션변경/상품추가 (6%)</div><div class="lt-item">4위 - 기타 (6%)</div><div class="lt-item">5위 - 예약/주문__기타 (6%)</div><div class="lt-item">6위 - 예약/주문__상품구매가능여부 (6%)</div><div class="lt-item">7위 - 예약/주문__처리상황 (6%)</div><div class="lt-item">8위 - 예약/주문__수령/주문정보변경 (6%)</div></div></div><div class="lt-card"><div class="lt-card-title">ja</div><div class="lt-list"><div class="lt-item">1위 - 서비스__정보 (20%)</div><div class="lt-item">2위 - 변경취소__단순변심 (20%)</div><div class="lt-item">3위 - 예약/주문__옵션변경/상품추가 (20%)</div><div class="lt-item">4위 - 변경취소__옵션변경 (10%)</div><div class="lt-item">5위 - 변경취소__날짜시간변경 (10%)</div><div class="lt-item">6위 - 예약/주문__처리상황 (10%)</div><div class="lt-item">7위 - 결제환불__환불절차 (10%)</div></div></div><div class="lt-card"><div class="lt-card-title">en</div><div class="lt-list"><div class="lt-item">1위 - 서비스__정보 (14%)</div><div class="lt-item">2위 - 변경취소__단순변심 (14%)</div><div class="lt-item">3위 - 예약/주문__옵션변경/상품추가 (14%)</div><div class="lt-item">4위 - 변경취소__옵션변경 (14%)</div><div class="lt-item">5위 - 기타 (14%)</div><div class="lt-item">6위 - 변경취소__날짜시간변경 (14%)</div><div class="lt-item">7위 - 예약/주문__기타 (14%)</div></div></div><div class="lt-card"><div class="lt-card-title">zh-CN</div><div class="lt-list"><div class="lt-item">1위 - 변경취소__단순변심 (67%)</div><div class="lt-item">2위 - 예약/주문__수령방법 (33%)</div></div></div><div class="lt-card"><div class="lt-card-title">zh-HK</div><div class="lt-list"><div class="lt-item">1위 - 변경취소__옵션변경 (50%)</div><div class="lt-item">2위 - 예약/주문__상품구매가능여부 (50%)</div></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div id="pie-tooltip" class="pie-tooltip hidden"></div>
+  <script>
+    (function(){
+      const tabAnalProduct = document.getElementById('tab-anal-product');
+      const tabAnalResv = document.getElementById('tab-anal-resv');
+      const tabType = document.getElementById('tab-type');
+      const tabLang = document.getElementById('tab-lang');
+      const tabsDimension = document.getElementById('tabs-dimension');
+      const barsType = document.getElementById('bars-type');
+      const barsLang = document.getElementById('bars-lang');
+      const barsResv = document.getElementById('bars-resv');
+      const barsResvProduct = document.getElementById('bars-resv-product');
+      const ylabelsProducts = document.getElementById('ylabels-products');
+      const ylabelsResv = document.getElementById('ylabels-resv');
+      const scrollProducts = document.getElementById('scroll-products');
+      const scrollResv = document.getElementById('scroll-resv');
+      const resvRatios = document.getElementById('resv-ratios');
+      const resvRatiosCard = document.getElementById('resv-ratios-card');
+      const resvLangTypeCard = document.getElementById('resv-langtype-card');
+      // Product-internal dimension tabs
+      const tabProdType = document.getElementById('tab-prod-type');
+      const tabProdLang = document.getElementById('tab-prod-lang');
+      const legendType = document.getElementById('legend-type');
+      const legendLang = document.getElementById('legend-lang');
+      const legendResv = document.getElementById('legend-resv');
+      const yAxisLabel = document.getElementById('y-axis-label');
+      const pie = document.getElementById('pie-tooltip');
+      const pageTitle = document.getElementById('page-title');
+      const chartDesc = document.getElementById('chart-desc');
+      const detail = document.getElementById('bar-detail');
+      const svg = document.getElementById('chart');
+      const TOTAL = 39;
+
+      const DATA = {"types":["서비스__정보","변경취소__단순변심","예약/주문__옵션변경/상품추가","변경취소__옵션변경","기타","변경취소__날짜시간변경","예약/주문__기타","예약/주문__상품구매가능여부","예약/주문__처리상황","결제환불__환불절차","예약/주문__수령/주문정보변경","예약/주문__수령방법"],"langs":["zh-TW","ja","en","zh-CN","zh-HK"],"productOrder":["11653","13165","13806","373","11230","11559","12382","12878","12948","13043","13261","13266","13772","13782","13896","14169","14201","14278","14309","14365","14398","14413","14426","14523","14604","14681","14687","14822","15009","15032","15078","15104","83044"],"tri":{"373":{"예약/주문__기타":{"en":1}},"11230":{"서비스__정보":{"zh-TW":1}},"11559":{"서비스__정보":{"zh-TW":1}},"11653":{"변경취소__날짜시간변경":{"ja":1},"변경취소__단순변심":{"ja":2},"변경취소__옵션변경":{"ja":1}},"12382":{"예약/주문__상품구매가능여부":{"zh-HK":1}},"12878":{"변경취소__단순변심":{"zh-TW":1}},"12948":{"예약/주문__수령방법":{"zh-CN":1}},"13043":{"서비스__정보":{"zh-TW":1}},"13165":{"변경취소__단순변심":{"zh-TW":1},"서비스__정보":{"zh-TW":1},"예약/주문__기타":{"zh-TW":1}},"13261":{"서비스__정보":{"zh-TW":1}},"13266":{"변경취소__단순변심":{"zh-CN":1}},"13772":{"변경취소__옵션변경":{"en":1}},"13782":{"서비스__정보":{"en":1}},"13806":{"예약/주문__상품구매가능여부":{"zh-TW":1},"변경취소__단순변심":{"zh-CN":1}},"13896":{"기타":{"en":1}},"14169":{"서비스__정보":{"ja":1}},"14201":{"예약/주문__옵션변경/상품추가":{"zh-TW":1}},"14278":{"서비스__정보":{"zh-TW":1}},"14309":{"예약/주문__옵션변경/상품추가":{"ja":1}},"14365":{"변경취소__날짜시간변경":{"en":1}},"14398":{"변경취소__단순변심":{"en":1}},"14413":{"예약/주문__처리상황":{"ja":1}},"14426":{"변경취소__옵션변경":{"zh-HK":1}},"14523":{"예약/주문__옵션변경/상품추가":{"en":1}},"14604":{"서비스__정보":{"zh-TW":1}},"14681":{"결제환불__환불절차":{"ja":1}},"14687":{"서비스__정보":{"ja":1}},"14822":{"예약/주문__옵션변경/상품추가":{"ja":1}},"15009":{"예약/주문__처리상황":{"zh-TW":1}},"15032":{"변경취소__단순변심":{"zh-TW":1}},"15078":{"서비스__정보":{"zh-TW":1}},"15104":{"예약/주문__수령/주문정보변경":{"zh-TW":1}},"83044":{"기타":{"zh-TW":1}}},"texts":{"373":{"예약/주문__기타":{"en":[]}},"11230":{"서비스__정보":{"zh-TW":["\"고객은 부산-서울 고속버스 티켓 판매 여부를 문의했고"]}},"11559":{"서비스__정보":{"zh-TW":["고객은 I.O.U(독점 예약) 레스토랑에서 디저트 접시에 ‘Happy birthday’ 문구를 써주는 서비스 제공 여부를 문의함. 해당 레스토랑은 해당 서비스를 제공하지 않는 것으로 확인됨. 추가 문의는 없었음."]}},"11653":{"변경취소__날짜시간변경":{"ja":["\"고객은 9월 12일 14:25 청주공항→서울 고속버스 예약 시 만석 안내를 받았으며"]},"변경취소__단순변심":{"ja":["\"고객 NAMIKO MATSUMOTO(sakuf3889@gmail.com)이 청주공항-서울 고속버스 예약(예약코드: 250909tlrw0k) 취소 요청함. 담당자가 업체에 취소 신청 접수 완료","\"2025-09-06에 宮口 翔伍(1234296)와의 채팅이 시작되었으며"]},"변경취소__옵션변경":{"ja":["\"유미☆ゆみ(650457)은 9월12일 14:25 청주공항 출발 고속버스(성인 2명) 예약 후"]}},"12382":{"예약/주문__상품구매가능여부":{"zh-HK":["\"업체가 7월 말까지 현 위치에서 영업 후 잠실로 이전 예정이며"]}},"12878":{"변경취소__단순변심":{"zh-TW":["\"2025-09-02에 陳彥蓉(863183)과의 채팅이 시작되었으며"]}},"12948":{"예약/주문__수령방법":{"zh-CN":["\"고객 Jinyu Zhu(예약번호: 250903a0pgfp)가 2025 부산국제불꽃축제 S특구 좌석권 수령 방법 문의. 예약 완료 후 1~2영업일 내 확인 이메일 발송"]}},"13043":{"서비스__정보":{"zh-TW":["\"고객은 SKT eSIM(010번호/무제한 데이터) 상품 구매 후"]}},"13165":{"변경취소__단순변심":{"zh-TW":["\"고객 Rabby兔子💄은 HOSU DOSAN 총점(예술인 염색/스타일링) 예약 후"]},"서비스__정보":{"zh-TW":["\"고객은 HOSU DOSAN 총점(예능인 염색/스타일링) 예약 시 제공되는 AREX 공항철도 티켓 수령 방법을 문의함. 티켓은 예약 확정 후 체험일 2일 전에 이메일로 발송되며"]},"예약/주문__기타":{"zh-TW":["\"고객은 HOSU DOSAN 미용실 예약 후 결제(신용카드 및 10"]}},"13261":{"서비스__정보":{"zh-TW":["\"고객은 동대문 SPAREX 찜질방(즉시 사용) 예약 건에 대해 QR코드 제공 여부를 문의했으며"]}},"13266":{"변경취소__단순변심":{"zh-CN":["\"고객 lyuziyan031@gmail.com(예약번호: 250902x4bpee)이 ‘弘大CHOP HAIR’ 미용실 예약 취소 문의함. 상품 규정상 체험일 3일 전 이후에는 환불 및 변경 불가하며"]}},"13772":{"변경취소__옵션변경":{"en":["\"예약자 Dao가 The Day's Hair 홍대점 디지털펌 예약(예약번호: 250828q45x0m) 취소 가능 여부 문의. 9월 3일 이전 시술 희망. 예약 3일 전까지 무료 취소/변경 가능하나"]}},"13782":{"서비스__정보":{"en":["\"고객이 쿠폰팩을 구매했으나 수령하지 못했고"]}},"13806":{"예약/주문__상품구매가능여부":{"zh-TW":["\"Creatrip에서 오전에 예약이 재개되어"]},"변경취소__단순변심":{"zh-CN":["\"고객은 Sihyunhada(圣水旗舰店) 예약(번호: 2507129gutug) 시간 오류로 문의함. 원래 3시 예약을 원했으나"]}},"13896":{"기타":{"en":["\"2025-08-31 04:18 AM UTC에 roxyfoxy(897181)와 채팅이 시작되었으며"]}},"14169":{"서비스__정보":{"ja":["\"고객은 인천공항 GalaxyS Ultra 시리즈 스마트폰 렌탈 예약(17:30)에 대해 입국 심사 지연 시 예약이 취소되는지 문의함. 상담사는 지연이 길어질 경우 No show로 처리될 수 있으니 도착 예정 1~2시간 후로 예약할 것을 권장하고"]}},"14201":{"예약/주문__옵션변경/상품추가":{"zh-TW":["\"고객 惠茹 鄒(1236794)은 弘大nBOM Clinic(피부관리/리프팅) 예약 관련"]}},"14278":{"서비스__정보":{"zh-TW":["申請時可先填寫舊護照資訊，換發新護照後需回信更新資料。領取票券時建議攜帶新舊護照。"]}},"14309":{"예약/주문__옵션변경/상품추가":{"ja":["7/21(月)11:00のホイップド体験は残席1名のため、2名予約は不可。2名希望の場合は14:00（残席2名）、18:30（空きあり）を案内。予約はリアルタイムで変動するため、早めの予約を推奨。"]}},"14365":{"변경취소__날짜시간변경":{"en":["\"Charm(1231316)은 Gangnam B&VIIT Eye Center 예약 날짜 변경을 요청했으며"]}},"14398":{"변경취소__단순변심":{"en":["고객 renniechung@gmail.com이 청주시⇄동서울 버스 티켓(예약번호: 250831qjagox) 및 추가 주문(250831v0qenl) 취소 및 환불을 요청함. 담당 부서에 이관되어 1~2영업일 내 환불 처리 예정. 상품별 환불 정책에 따라 취소 가능 여부가 결정됨."]}},"14413":{"예약/주문__처리상황":{"ja":["\"Kanako Oyama는 '清潭メイクOLLY' 예약(코드: 250731z6xbn7) 후 매장으로부터 SNS 연락이 없음을 문의함. 담당자는 예약이 7월 31일 17:17(KST)에 정상적으로 완료되었으며"]}},"14426":{"변경취소__옵션변경":{"zh-HK":["\"YAN FUNG(1230832)와 2025-09-01 08:04 AM UTC에 채팅이 시작되었으며"]}},"14523":{"예약/주문__옵션변경/상품추가":{"en":["\"예약번호 2507117pc38a의 8월 1일 17시 예약은 매장 사정으로 불가하며"]}},"14604":{"서비스__정보":{"zh-TW":["\"고객(pa da)은 2025년 9월 6일 19:30에 CYAN 강남점(증명/이미지 사진) 예약 후 방문했으나"]}},"14681":{"결제환불__환불절차":{"ja":["\"고객 Mana는 DAYDAY Hair＆Makeup 예약 시 필요한 정보를 모두 입력했으나"]}},"14687":{"서비스__정보":{"ja":["\"고객 NUMAZAKI MIKA가 DANPOONG 본점 예약 관련"]}},"14822":{"예약/주문__옵션변경/상품추가":{"ja":["고객 OIWA TSUKADA(a.tsukky1110@gmail.com)이 BROW DOLL 江南 예약(코드: 250904b45mtf)에 대해 '眉アート' 추가 문의함. 예약 결제 미완료로 신규 예약 및 결제 필요 안내함. 추가 문의는 영업시간 내 재문의 또는 고객센터 연락 요청함."]}},"15009":{"예약/주문__처리상황":{"zh-TW":["\"고객(joanne89817@gmail.com"]}},"15032":{"변경취소__단순변심":{"zh-TW":["\"고객(羅詠儒)은 HOSU DOSAN建大聖水店 예약(예약번호: 250829oj5i7e) 관련"]}},"15078":{"서비스__정보":{"zh-TW":["\"고객은 Hubase High藥局(Rejuall 예약 픽업)에서 1계정당 10개까지 예약 수령 가능 여부와 제한 기준(매장"]}},"15104":{"예약/주문__수령/주문정보변경":{"zh-TW":["\"2025-09-06 12:32 PM UTC에 고객(莞檸"]}},"83044":{"기타":{"zh-TW":["\"고객이 '新BRYN魔鬼氈運動鞋' 주문 취소 사유 문의. Creatrip은 재고 부족"]}}},"reqs":{"373":{"예약/주문__기타":{"en":["92748"]}},"11230":{"서비스__정보":{"zh-TW":["관련 상품 링크(https://creatrip.com/spot/11235)를 안내받음. 명절 등 성수기에는 예매가 어려울 수 있으며"]}},"11559":{"서비스__정보":{"zh-TW":["93897"]}},"11653":{"변경취소__날짜시간변경":{"ja":["14:55로 변경을 희망함. 시스템상 시간 변경 시 날짜만 선택 가능하다고 문의함. 담당자는 14:55 버스 잔여석 확인 후 가능하면 예약 변경 처리 예정임.\""]},"변경취소__단순변심":{"ja":["1~2일 내 전액 환불 예정이며","채팅 내용은 상담 종료 시 추가될 예정임.\""]},"변경취소__옵션변경":{"ja":["예약 시간이 매진되었다는 안내 메일을 받음. 변경 요청 시 날짜만 선택되고 시간 선택이 불가한 문제 발생. 원하는 시간대 전달 요청함. 상담은 언어 지원 문제로 AI 번역을 통해 진행됨.\""]}},"12382":{"예약/주문__상품구매가능여부":{"zh-HK":["현재 8월 예약은 불가합니다. 새 위치에서 재오픈 시 예약 정보가 업데이트될 예정입니다.\""]}},"12878":{"변경취소__단순변심":{"zh-TW":["채팅 내용은 상담 종료 시 첨부될 예정임.\""]}},"12948":{"예약/주문__수령방법":{"zh-CN":["행사 1~5일 전 티켓 수령 장소·일시 등 상세 안내 이메일 또는 SNS로 별도 안내 예정.\""]}},"13043":{"서비스__정보":{"zh-TW":["대만에서 eSIM을 휴대폰에 등록하면 사용 기간이 바로 시작되는지 문의함. 상담원은 한국 도착 후 등록할 것을 안내하며"]}},"13165":{"변경취소__단순변심":{"zh-TW":["라섹 수술로 인해 시술 불가 판정을 받아 무료 취소 및 환불 문의함. 예약일 3일 전까지 취소만 가능하며"]},"서비스__정보":{"zh-TW":["예약이 확정되어야만 발급 대상 1"]},"예약/주문__기타":{"zh-TW":["839원 상당의 적립금 사용)했으나"]}},"13261":{"서비스__정보":{"zh-TW":["해당 상품은 QR코드가 제공되지 않고 결제 후 자동확정되어 마이페이지 또는 이메일에서 예약 내역을 확인"]}},"13266":{"변경취소__단순변심":{"zh-CN":["고객이 취소 시 환불 없이 처리됨에 동의함. 해당 내용 업체에 전달 예정. 추가 문의 없음.\""]}},"13772":{"변경취소__옵션변경":{"en":["부분 변경 불가로 전체 예약 취소 후 재예약 필요.\""]}},"13782":{"서비스__정보":{"en":["이미 활동을 예약했으므로 환불을 요청함.\""]}},"13806":{"예약/주문__상품구매가능여부":{"zh-TW":["예약 페이지에서 다시 예약할 수 있습니다.\""]},"변경취소__단순변심":{"zh-CN":["시스템상 17:30으로 자동 배정되어 불만을 제기함. 예약 변경 요청에 답변이 없어 불안감을 표함. 상담사는 예약 취소 가능함을 안내하고"]}},"13896":{"기타":{"en":["채팅 종료 시 대화 내용이 추가될 예정임. URL 정보는 없음.\""]}},"14169":{"서비스__정보":{"ja":["긴급 상황 발생 시 업체 SNS로 연락할 것을 안내함.\""]}},"14201":{"예약/주문__옵션변경/상품추가":{"zh-TW":["친구와 동시에 예약 가능한지 문의함. 상담 결과"]}},"14278":{"서비스__정보":{"zh-TW":["88786"]}},"14309":{"예약/주문__옵션변경/상품추가":{"ja":["88812"]}},"14365":{"변경취소__날짜시간변경":{"en":["기존 예약을 2025-09-04 09:30으로 변경 완료함. 추가 문의는 없었음.\""]}},"14398":{"변경취소__단순변심":{"en":["93167"]}},"14413":{"예약/주문__처리상황":{"ja":["긴급 상황이 아니면 매장에서 SNS 연락을 하지 않는다고 안내함. 예약 정보는 로그인 후 '예약' 페이지에서 확인 가능함.\""]}},"14426":{"변경취소__옵션변경":{"zh-HK":["채팅 내용은 상담 종료 시 첨부될 예정임.\""]}},"14523":{"예약/주문__옵션변경/상품추가":{"en":["14:00"]}},"14604":{"서비스__정보":{"zh-TW":["현장에 도착했을 때 매장이 영업하지 않아 문의함. 매장 이전으로 인해 주소 혼동이 있었으며"]}},"14681":{"결제환불__환불절차":{"ja":["동시간대에 다른 사용자가 예약해 예약이 취소됨. 예약 가능 여부를 사전 확인할 수 있는지"]}},"14687":{"서비스__정보":{"ja":["갑작스러운 생리로 서비스 이용 가능 여부 문의함. 상담원이 매장에 긴급 확인 중이며"]}},"14822":{"예약/주문__옵션변경/상품추가":{"ja":["93910"]}},"15009":{"예약/주문__처리상황":{"zh-TW":["温若安)이 개인색채검사(예약번호: 250905vglsr4"]}},"15032":{"변경취소__단순변심":{"zh-TW":["예약 시간 경과 후에야 예약이 접수되고 연락(카톡"]}},"15078":{"서비스__정보":{"zh-TW":["일자"]}},"15104":{"예약/주문__수령/주문정보변경":{"zh-TW":["445678)과 채팅이 시작됨. 채팅 내용은 상담 종료 시 기록될 예정임.\""]}},"83044":{"기타":{"zh-TW":["미결제"]}}},"statusTypeLang":{},"statusLangType":{}};
+
+      function showType(){
+        tabType.classList.add('active');
+        tabLang.classList.remove('active');
+        tabType.setAttribute('aria-selected','true');
+        tabLang.setAttribute('aria-selected','false');
+        barsType.style.display = '';
+        barsLang.style.display = 'none';
+        legendType.classList.remove('hidden');
+        legendLang.classList.add('hidden');
+        hidePie();
+      }
+      function showLang(){
+        tabLang.classList.add('active');
+        tabType.classList.remove('active');
+        tabLang.setAttribute('aria-selected','true');
+        tabType.setAttribute('aria-selected','false');
+        barsLang.style.display = '';
+        barsType.style.display = 'none';
+        legendLang.classList.remove('hidden');
+        legendType.classList.add('hidden');
+        hidePie();
+      }
+      tabType.addEventListener('click', showType);
+      tabLang.addEventListener('click', showLang);
+      function showAnalProduct(){
+        tabAnalProduct.classList.add('active');
+        tabAnalResv.classList.remove('active');
+        tabAnalProduct.setAttribute('aria-selected','true');
+        tabAnalResv.setAttribute('aria-selected','false');
+        // Hide outer dimension tabs, use internal tabs within chart
+        tabsDimension.style.display = 'none';
+        if (barsResv) barsResv.style.display = 'none';
+        if (barsResvProduct) barsResvProduct.style.display = 'none';
+        legendResv.classList.add('hidden');
+        scrollResv.classList.add('hidden');
+        scrollProducts.classList.remove('hidden');
+        resvRatios.classList.add('hidden');
+        if (resvRatiosCard) resvRatiosCard.classList.add('hidden');
+        if (resvLangTypeCard) resvLangTypeCard.classList.add('hidden');
+        // Default to product '문의 유형'
+        if (tabProdType) {
+          tabProdType.classList.add('active');
+          tabProdType.setAttribute('aria-selected','true');
+        }
+        if (tabProdLang) {
+          tabProdLang.classList.remove('active');
+          tabProdLang.setAttribute('aria-selected','false');
+        }
+        // Show bars/legend for type by default
+        barsType.style.display = '';
+        barsLang.style.display = 'none';
+        legendType.classList.remove('hidden');
+        legendLang.classList.add('hidden');
+        hidePie();
+        detail.classList.add('hidden');
+        if (pageTitle) pageTitle.textContent = '상품 기반 분석';
+        document.title = '상품 기반 분석 대시보드';
+        if (yAxisLabel) yAxisLabel.textContent = '상품 코드';
+        if (ylabelsProducts) ylabelsProducts.style.display = '';
+        if (ylabelsResv) ylabelsResv.style.display = 'none';
+        if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 상품 코드 (총 ' + TOTAL + ')';
+        const resvNull = document.getElementById('resv-null-summary');
+        if (resvNull) resvNull.classList.add('hidden');
+      }
+      // Handlers for product-internal dimension tabs
+      function showProdType(){
+        if (tabProdType && tabProdLang) {
+          tabProdType.classList.add('active');
+          tabProdType.setAttribute('aria-selected','true');
+          tabProdLang.classList.remove('active');
+          tabProdLang.setAttribute('aria-selected','false');
+        }
+        barsType.style.display = '';
+        barsLang.style.display = 'none';
+        legendType.classList.remove('hidden');
+        legendLang.classList.add('hidden');
+      }
+      function showProdLang(){
+        if (tabProdType && tabProdLang) {
+          tabProdLang.classList.add('active');
+          tabProdLang.setAttribute('aria-selected','true');
+          tabProdType.classList.remove('active');
+          tabProdType.setAttribute('aria-selected','false');
+        }
+        barsLang.style.display = '';
+        barsType.style.display = 'none';
+        legendLang.classList.remove('hidden');
+        legendType.classList.add('hidden');
+      }
+      if (tabProdType) tabProdType.addEventListener('click', showProdType);
+      if (tabProdLang) tabProdLang.addEventListener('click', showProdLang);
+      function showAnalResv(){
+        tabAnalResv.classList.add('active');
+        tabAnalProduct.classList.remove('active');
+        tabAnalResv.setAttribute('aria-selected','true');
+        tabAnalProduct.setAttribute('aria-selected','false');
+        tabsDimension.style.display = 'none';
+        barsType.style.display = 'none';
+        barsLang.style.display = 'none';
+        legendType.classList.add('hidden');
+        legendLang.classList.add('hidden');
+        if (barsResv) barsResv.style.display = 'none';
+        if (barsResvProduct) barsResvProduct.style.display = 'none';
+        scrollProducts.classList.add('hidden');
+        scrollResv.classList.remove('hidden');
+        // Legend defaults to 문의 유형 (디폴트 탭)
+        legendResv.classList.add('hidden');
+        legendType.classList.remove('hidden');
+        resvRatios.classList.remove('hidden');
+        if (resvRatiosCard) resvRatiosCard.classList.remove('hidden');
+        if (resvLangTypeCard) resvLangTypeCard.classList.remove('hidden');
+        hidePie();
+        detail.classList.add('hidden');
+        if (pageTitle) pageTitle.textContent = '예약 기반 분석';
+        document.title = '예약 기반 분석 대시보드';
+        // Y축 예약 상태 라벨 유지
+        if (yAxisLabel) yAxisLabel.textContent = '예약 상태';
+        if (ylabelsProducts) ylabelsProducts.style.display = 'none';
+        if (ylabelsResv) ylabelsResv.style.display = '';
+        if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 예약 상태 (총 ' + TOTAL + ')';
+        const resvNull = document.getElementById('resv-null-summary');
+        if (resvNull) resvNull.classList.remove('hidden');
+        // reset reservation sub-tab state if present
+        const tabResvType = document.getElementById('tab-resv-type');
+        const tabResvLang = document.getElementById('tab-resv-lang');
+        const barsResvTypesG = document.getElementById('bars-resv-types');
+        const barsResvLangsG = document.getElementById('bars-resv-langs');
+        if (tabResvType && tabResvLang) {
+          tabResvType.classList.add('active');
+          tabResvType.setAttribute('aria-selected','true');
+          tabResvLang.classList.remove('active');
+          tabResvLang.setAttribute('aria-selected','false');
+        }
+        if (barsResvTypesG && barsResvLangsG) {
+          barsResvTypesG.style.display = '';
+          barsResvLangsG.style.display = 'none';
+        }
+      }
+      // Reservation sub-tab handlers
+      document.addEventListener('click', function(e){
+        const t = e.target;
+        if (!t || !t.closest) return;
+        if (t.id === 'tab-resv-type') {
+          const tabResvType = document.getElementById('tab-resv-type');
+          const tabResvLang = document.getElementById('tab-resv-lang');
+          const barsResvTypesG = document.getElementById('bars-resv-types');
+          const barsResvLangsG = document.getElementById('bars-resv-langs');
+          if (tabResvType && tabResvLang) {
+            tabResvType.classList.add('active');
+            tabResvType.setAttribute('aria-selected','true');
+            tabResvLang.classList.remove('active');
+            tabResvLang.setAttribute('aria-selected','false');
+          }
+          if (barsResvTypesG && barsResvLangsG) {
+            barsResvTypesG.style.display = '';
+            barsResvLangsG.style.display = 'none';
+          }
+          legendType.classList.remove('hidden');
+          legendLang.classList.add('hidden');
+        } else if (t.id === 'tab-resv-lang') {
+          const tabResvType = document.getElementById('tab-resv-type');
+          const tabResvLang = document.getElementById('tab-resv-lang');
+          const barsResvTypesG = document.getElementById('bars-resv-types');
+          const barsResvLangsG = document.getElementById('bars-resv-langs');
+          if (tabResvType && tabResvLang) {
+            tabResvLang.classList.add('active');
+            tabResvLang.setAttribute('aria-selected','true');
+            tabResvType.classList.remove('active');
+            tabResvType.setAttribute('aria-selected','false');
+          }
+          if (barsResvTypesG && barsResvLangsG) {
+            barsResvTypesG.style.display = 'none';
+            barsResvLangsG.style.display = '';
+          }
+          legendLang.classList.remove('hidden');
+          legendType.classList.add('hidden');
+        }
+      });
+      tabAnalProduct.addEventListener('click', showAnalProduct);
+      tabAnalResv.addEventListener('click', showAnalResv);
+
+      function hidePie(){
+        pie.classList.add('hidden');
+        pie.innerHTML = '';
+      }
+
+      function formatPercent(v){
+        return (v*100).toFixed(1).replace(/.0$/, '') + '%';
+      }
+
+      function drawPie(entries, colors, title){
+        const total = entries.reduce((a, [,c]) => a + c, 0);
+        if (!total) return '';
+        const W = 240, H = 200, CX = 90, CY = 100, R = 70;
+        let a0 = -Math.PI/2; // start at top
+        const parts = [];
+        const leg = [];
+        // Single-slice (100%) case: draw a full circle
+        if (entries.length === 1) {
+          const label = entries[0][0];
+          const c = entries[0][1];
+          const color = colors(label);
+          parts.push('<circle cx="' + CX + '" cy="' + CY + '" r="' + R + '" fill="' + color + '"></circle>');
+          leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (100%)</span></div>');
+          return '<div class="pie-title">' + title + '</div>' +
+                 '<svg width="' + W + '" height="' + H + '"><g>' + parts.join('') + '</g></svg>' +
+                 '<div class="pie-legend">' + leg.join('') + '</div>';
+        }
+        for (const [label, c] of entries){
+          const frac = c / total;
+          const a1 = a0 + frac * Math.PI * 2;
+          const x0 = CX + R * Math.cos(a0), y0 = CY + R * Math.sin(a0);
+          const x1 = CX + R * Math.cos(a1), y1 = CY + R * Math.sin(a1);
+          const large = (a1 - a0) > Math.PI ? 1 : 0;
+          const color = colors(label);
+          const d = 'M ' + CX + ' ' + CY + ' L ' + x0 + ' ' + y0 + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 + ' Z';
+          parts.push('<path d="' + d + '" fill="' + color + '"></path>');
+          leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (' + formatPercent(frac) + ')</span></div>');
+          a0 = a1;
+        }
+        return '<div class="pie-title">' + title + '</div>' +
+               '<svg width="' + W + '" height="' + H + '"><g>' + parts.join('') + '</g></svg>' +
+               '<div class="pie-legend">' + leg.join('') + '</div>';
+      }
+
+      function onMove(e){
+        pie.style.left = (e.clientX + 14) + 'px';
+        pie.style.top = (e.clientY + 14) + 'px';
+      }
+
+      function attachHover(){
+        const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab'];
+        const paletteType = (t) => palette[DATA.types.indexOf(t) % palette.length];
+        const paletteLang = (l) => palette[DATA.langs.indexOf(l) % palette.length];
+        const segs = document.querySelectorAll('.seg');
+
+        function escapeHtml(s){
+          return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        function renderGroupedContentsByLang(prod, typeOrNull, langOrNull){
+          // Build groups: { lang -> [ {text, id} ] }
+          const groups = {};
+          if (typeOrNull !== null) {
+            const tbox = DATA.texts[prod] && DATA.texts[prod][typeOrNull];
+            const ibox = DATA.reqs[prod] && DATA.reqs[prod][typeOrNull];
+            if (tbox) {
+              for (const L in tbox) {
+                if (!Object.prototype.hasOwnProperty.call(tbox, L)) continue;
+                const texts = tbox[L] || [];
+                const ids = (ibox && ibox[L]) || [];
+                groups[L] = [];
+                for (let i = 0; i < Math.min(texts.length, 8); i++) {
+                  groups[L].push({ text: texts[i], id: ids[i] || '' });
+                }
+              }
+            }
+          } else if (langOrNull !== null) {
+            const L = langOrNull;
+            const tset = DATA.texts[prod] || {};
+            const rset = DATA.reqs[prod] || {};
+            const arr = [];
+            for (const T in tset) {
+              if (!Object.prototype.hasOwnProperty.call(tset, T)) continue;
+              const texts = (tset[T] && tset[T][L]) || [];
+              const ids = (rset[T] && rset[T][L]) || [];
+              for (let i = 0; i < Math.min(texts.length, 8); i++) {
+                arr.push({ text: texts[i], id: ids[i] || '' });
+              }
+            }
+            if (arr.length) groups[L] = arr.slice(0, 8);
+          }
+          const langsOrder = Object.keys(groups);
+          if (!langsOrder.length) return '';
+          let html = '<div class="pie-contents"><div class="pie-contents-title">문의 내용</div>';
+          for (const L of langsOrder) {
+            html += '<div style="font-size:11px;margin:6px 0 2px 0;color:#6b7280;">' + escapeHtml(L) + '</div><ul class="pie-contents-list">';
+            for (const {text,id} of groups[L]) {
+              const idHtml = id ? (' <span style="color:#6b7280">(요청 ID: ' + escapeHtml(id) + ')</span>') : '';
+              html += '<li>' + escapeHtml(text) + idHtml + '</li>';
+            }
+            html += '</ul>';
+          }
+          html += '</div>';
+          return html;
+        }
+
+        function renderGroupedContentsByType(prod, lang){
+          // Build groups: { type -> [ {text, id} ] }
+          const groups = {};
+          const tset = DATA.texts[prod] || {};
+          const rset = DATA.reqs[prod] || {};
+          // Preserve global type order for group ordering
+          for (const T of DATA.types) {
+            const texts = (tset[T] && tset[T][lang]) || [];
+            const ids = (rset[T] && rset[T][lang]) || [];
+            if (!texts.length) continue;
+            const arr = [];
+            for (let i = 0; i < Math.min(texts.length, 8); i++) {
+              arr.push({ text: texts[i], id: ids[i] || '' });
+            }
+            if (arr.length) groups[T] = arr;
+          }
+          const order = Object.keys(groups);
+          if (!order.length) return '';
+          let html = '<div class="pie-contents"><div class="pie-contents-title">문의 내용</div>';
+          for (const T of order) {
+            html += '<div style="font-size:11px;margin:6px 0 2px 0;color:#6b7280;">' + escapeHtml(T) + '</div><ul class="pie-contents-list">';
+            for (const {text,id} of groups[T]) {
+              const idHtml = id ? (' <span style="color:#6b7280">(요청 ID: ' + escapeHtml(id) + ')</span>') : '';
+              html += '<li>' + escapeHtml(text) + idHtml + '</li>';
+            }
+            html += '</ul>';
+          }
+          html += '</div>';
+          return html;
+        }
+        segs.forEach(el => {
+          el.addEventListener('mouseenter', (e) => {
+            const role = el.getAttribute('data-role');
+            const prod = el.getAttribute('data-prod');
+            const cat = el.getAttribute('data-cat');
+            let entries = [];
+            if (role === 'resv') {
+              const status = el.getAttribute('data-status') || '';
+              const isTypeMode = !!(document.getElementById('bars-resv-types') && document.getElementById('bars-resv-types').style.display !== 'none');
+              if (isTypeMode) {
+                const box = (DATA.statusTypeLang && DATA.statusTypeLang[status] && DATA.statusTypeLang[status][cat]) || null;
+                if (box) entries = Object.entries(box).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+                pie.innerHTML = drawPie(entries, (l)=>paletteLang(l), status + ' · ' + cat + ' → 언어');
+              } else {
+                const L = cat;
+                const types = DATA.types;
+                const box = (DATA.statusLangType && DATA.statusLangType[status]) || {};
+                const rows = types.map(t => [t, (box[L] && box[L][t]) ? box[L][t] : 0]).filter(([,c])=>c>0);
+                entries = rows.sort((a,b)=>b[1]-a[1]);
+                pie.innerHTML = drawPie(entries, (t)=>paletteType(t), status + ' · ' + cat + ' → 문의 유형');
+              }
+              if (entries.length){ pie.classList.remove('hidden'); }
+              return;
+            }
+            if (role === 'type') {
+              const box = DATA.tri[prod] && DATA.tri[prod][cat];
+              if (box) {
+                entries = Object.entries(box).filter(([,c]) => c > 0).sort((a,b)=>b[1]-a[1]);
+              }
+              pie.innerHTML = drawPie(entries, (l)=>paletteLang(l), prod + ' · ' + cat + ' → 언어') +
+                              renderGroupedContentsByLang(prod, cat, null);
+            } else {
+              const L = cat;
+              const types = DATA.types;
+              const box = DATA.tri[prod] || {};
+              const rows = types.map(t => [t, (box[t] && box[t][L]) ? box[t][L] : 0]).filter(([,c]) => c>0);
+              entries = rows.sort((a,b)=>b[1]-a[1]);
+              pie.innerHTML = drawPie(entries, (t)=>paletteType(t), prod + ' · ' + cat + ' → 문의 유형') +
+                              renderGroupedContentsByType(prod, L);
+            }
+            if (entries.length){ pie.classList.remove('hidden'); }
+          });
+          el.addEventListener('mousemove', onMove);
+          el.addEventListener('mouseleave', hidePie);
+
+          el.addEventListener('click', (e) => {
+            const role = el.getAttribute('data-role');
+            const prod = el.getAttribute('data-prod');
+            const cat = el.getAttribute('data-cat');
+            const status = el.getAttribute('data-status') || '';
+            const rectY = parseFloat(el.getAttribute('y')) || 0;
+            const barH = parseFloat(svg.dataset.barh || '22');
+            const ml = parseFloat(svg.dataset.ml || '100');
+            let entries = [];
+            let html = '';
+            if (role === 'resv') {
+              const isTypeMode = !!(document.getElementById('bars-resv-types') && document.getElementById('bars-resv-types').style.display !== 'none');
+              if (isTypeMode) {
+                const box = (DATA.statusTypeLang && DATA.statusTypeLang[status] && DATA.statusTypeLang[status][cat]) || null;
+                if (box) entries = Object.entries(box).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+                html = drawPie(entries, (l)=>paletteLang(l), status + ' · ' + cat + ' → 언어');
+              } else {
+                const L = cat;
+                const types = DATA.types;
+                const box = (DATA.statusLangType && DATA.statusLangType[status]) || {};
+                const rows = types.map(t => [t, (box[L] && box[L][t]) ? box[L][t] : 0]).filter(([,c])=>c>0);
+                entries = rows.sort((a,b)=>b[1]-a[1]);
+                html = drawPie(entries, (t)=>paletteType(t), status + ' · ' + cat + ' → 문의 유형');
+              }
+            } else if (role === 'type') {
+              const box = DATA.tri[prod] && DATA.tri[prod][cat];
+              if (box) entries = Object.entries(box).filter(([,c]) => c>0).sort((a,b)=>b[1]-a[1]);
+              html = drawPie(entries, (l)=>paletteLang(l), prod + ' · ' + cat + ' → 언어') +
+                     renderGroupedContentsByLang(prod, cat, null);
+            } else {
+              const L = cat;
+              const b = DATA.tri[prod] || {};
+              const rows = DATA.types.map(t => [t, (b[t] && b[t][L]) ? b[t][L] : 0]).filter(([,c])=>c>0);
+              entries = rows.sort((a,b)=>b[1]-a[1]);
+              html = drawPie(entries, (t)=>paletteType(t), prod + ' · ' + cat + ' → 문의 유형') +
+                     renderGroupedContentsByType(prod, L);
+            }
+            if (!entries.length) return;
+            hidePie();
+            let title;
+            if (role === 'type') title = escapeHtml(prod)+' · '+escapeHtml(cat)+' → 언어';
+            else if (role === 'lang') title = escapeHtml(prod)+' · '+escapeHtml(cat)+' → 문의 유형';
+            else {
+              const mode = (document.getElementById('bars-resv-types') && document.getElementById('bars-resv-types').style.display !== 'none') ? '언어' : '문의 유형';
+              title = escapeHtml(status)+' · '+escapeHtml(cat)+' → ' + mode;
+            }
+            detail.innerHTML = '<div class="bar-detail-header"><div class="bar-detail-title">' + title + '</div><button class="bar-detail-close" aria-label="닫기">닫기</button></div>' + '<div class="bar-detail-body">' + html + '</div>';
+            detail.style.left = ml + 'px';
+            detail.style.top = (rectY + barH + 6) + 'px';
+            detail.classList.remove('hidden');
+            const closeBtn = detail.querySelector('.bar-detail-close');
+            closeBtn.addEventListener('click', () => { detail.classList.add('hidden'); detail.innerHTML=''; });
+          });
+        });
+      }
+
+      attachHover();
+    })();
+  </script>
+</body>
+</html>
