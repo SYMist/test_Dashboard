@@ -178,6 +178,7 @@ function readData(csvPath) {
 
   const ordersPath = 'product_order_dummy_database.csv';
   const orderCounts = new Map();
+  const perProductOrderDateCounts = new Map();
   try {
     if (fs.existsSync(ordersPath)) {
       let oc = fs.readFileSync(ordersPath, 'utf8');
@@ -187,11 +188,23 @@ function readData(csvPath) {
         const h = olines[0].split(',');
         let idxProd = h.findIndex(x => x.trim() === '상품 코드');
         if (idxProd === -1) idxProd = h.findIndex(x => x.replace(/\u00A0/g,' ').trim() === '상품 코드');
+        let idxWhen = h.findIndex(x => x.replace(/\u00A0/g,' ').trim() === '주문 일시');
         for (let i = 1; i < olines.length; i++) {
           const row = olines[i].split(',');
           if (idxProd >= 0 && row.length > idxProd) {
             const code = String((row[idxProd] || '').trim());
-            if (code) orderCounts.set(code, (orderCounts.get(code) || 0) + 1);
+            if (code) {
+              orderCounts.set(code, (orderCounts.get(code) || 0) + 1);
+              if (idxWhen >= 0 && row.length > idxWhen) {
+                const when = String((row[idxWhen] || '').trim());
+                const d = when ? when.slice(0, 10) : '';
+                if (d) {
+                  if (!perProductOrderDateCounts.has(code)) perProductOrderDateCounts.set(code, new Map());
+                  const m = perProductOrderDateCounts.get(code);
+                  m.set(d, (m.get(d) || 0) + 1);
+                }
+              }
+            }
           }
         }
       }
@@ -274,11 +287,15 @@ function readData(csvPath) {
   for (const [k, m] of perProductDateCounts.entries()) {
     perProductDateCountsObj[k] = Object.fromEntries(m);
   }
-  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj };
+  const perProductOrderDateCountsObj = {};
+  for (const [k, m] of perProductOrderDateCounts.entries()) {
+    perProductOrderDateCountsObj[k] = Object.fromEntries(m);
+  }
+  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj, perProductOrderDateCounts: perProductOrderDateCountsObj };
 }
 
 function generateHtml(data, opts = {}) {
-  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts } = data;
+  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts, perProductOrderDateCounts } = data;
   const labels = productOrder;
   const values = labels.map(k => totals.get(k) || 0);
   const orderVals = labels.map(k => (orderCounts.get(k) || 0));
@@ -473,7 +490,8 @@ function generateHtml(data, opts = {}) {
   });
   const ratiosHtml = ratiosItems.map(({ prod, inq, ord, pct }) => {
     const val = pct == null ? '-' : (Math.round(pct * 100) / 100).toFixed(2) + '%';
-    return `<div class="ratio-item"><span class="ratio-code">${prod}</span><span class="ratio-val">${val}</span><span class="ratio-detail">(${inq}/${ord})</span></div>`;
+    const name = (codeNameMap && codeNameMap[prod]) ? codeNameMap[prod] : prod;
+    return `<div class="ratio-item"><span class="ratio-code">${name}</span><span class="ratio-val">${val}</span><span class="ratio-detail">(${inq}/${ord})</span></div>`;
   }).join('');
 
   const legendHtmlType = types.map((t) => {
@@ -560,7 +578,7 @@ function generateHtml(data, opts = {}) {
     .date-toolbar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:6px 0; font-size:12px; }
     .date-toolbar label { display:flex; align-items:center; gap:6px; color:#374151; }
     .date-toolbar .sep { color:#6b7280; }
-    .date-toolbar input[type="date"], .date-toolbar select { font-size:12px; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:#111; }
+    .date-toolbar input[type="date"], .date-toolbar input[type="text"], .date-toolbar select { font-size:12px; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; color:#111; }
   </style>
   <meta name="color-scheme" content="light dark">
   <style media="(prefers-color-scheme: dark)">
@@ -593,7 +611,7 @@ function generateHtml(data, opts = {}) {
     .line-chart-title { color:#e5e7eb; }
     .date-toolbar label { color:#d1d5db; }
     .date-toolbar .sep { color:#9ca3af; }
-    .date-toolbar input[type="date"], .date-toolbar select { background:#0d1323; color:#e5e7eb; border-color:#1f2937; }
+    .date-toolbar input[type="date"], .date-toolbar input[type="text"], .date-toolbar select { background:#0d1323; color:#e5e7eb; border-color:#1f2937; }
   </style>
 </head>
 <body>
@@ -603,6 +621,9 @@ function generateHtml(data, opts = {}) {
         <input type="date" id="filter-start" name="filter-start" />
         <span class="sep">~</span>
         <input type="date" id="filter-end" name="filter-end" />
+      </label>
+      <label for="filter-product">상품 검색
+        <input type="text" id="filter-product" name="filter-product" placeholder="상품명 또는 코드" />
       </label>
       <label for="filter-sort">정렬
         <select id="filter-sort" name="filter-sort">
@@ -710,7 +731,7 @@ function generateHtml(data, opts = {}) {
   <div id="product-tooltip" class="product-tooltip hidden"></div>
   <script>
     (function(){
-      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts })};
+      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts })};
       const TOTAL = ${total};
 
       const tabAnalProduct = document.getElementById('tab-anal-product');
@@ -1358,10 +1379,16 @@ function generateHtml(data, opts = {}) {
         if (!prodTip) return;
         const name = (DATA.codeNameMap && DATA.codeNameMap[prod]) ? DATA.codeNameMap[prod] : prod;
         const entriesObj = (DATA.perProductDateCounts && DATA.perProductDateCounts[prod]) ? DATA.perProductDateCounts[prod] : {};
+        const entriesOrdObj = (DATA.perProductOrderDateCounts && DATA.perProductOrderDateCounts[prod]) ? DATA.perProductOrderDateCounts[prod] : {};
         const chartEl = document.getElementById('chart');
         const chartRect = chartEl ? chartEl.getBoundingClientRect() : { left: 20, width: ${width} };
         const width = Math.round(chartRect.width);
-        const titleHtml = '<div class="product-tooltip-title">' + (name ? name : prod) + '</div>';
+        // compute totals and ratio
+        const inqTotal = Object.values(entriesObj).reduce((a,b)=>a+Number(b||0),0);
+        const ordTotalPref = Object.values(entriesOrdObj).reduce((a,b)=>a+Number(b||0),0);
+        const ordTotal = ordTotalPref || (DATA.orderCounts && DATA.orderCounts[prod]) || 0;
+        const pct = ordTotal > 0 ? (Math.round((inqTotal/ordTotal)*10000)/100) + '%' : '';
+        const titleHtml = '<div class="product-tooltip-title">' + (name ? name : prod) + '<span style="margin-left:8px; font-size:12px; color:#6b7280;">· 문의 수/주문 수 = ' + inqTotal + '/' + ordTotal + (pct?(' '+pct):'') + '</span></div>';
         const tabsHtml = '<div id="tabs-date2" class="tabs" role="tablist" style="margin:0 0 6px auto;">' +
           '<button id="tab2-date-d" class="tab active" role="tab" aria-selected="true">일 기준</button>'+
           '<button id="tab2-date-m" class="tab" role="tab" aria-selected="false">월 기준</button>'+
@@ -1458,36 +1485,55 @@ function generateHtml(data, opts = {}) {
         function render(mode){
           const svg = document.getElementById('chart-date-activity2');
           if (!svg) return;
-          const entries = Object.entries(entriesObj);
-          if (!entries.length) { svg.innerHTML = '<text x="20" y="40" fill="#666" font-size="12">데이터 없음</text>'; return; }
-          const g = group(entries, mode);
-          const labels = g.labels;
-          const values = g.values;
+          const entInq = Object.entries(entriesObj);
+          const entOrd = Object.entries(entriesOrdObj);
+          if (entInq.length === 0 && entOrd.length === 0) { svg.innerHTML = '<text x="20" y="40" fill="#666" font-size="12">데이터 없음</text>'; return; }
+          const gInq = entInq.length ? group(entInq, mode) : { labels: [], values: [] };
+          const gOrd = entOrd.length ? group(entOrd, mode) : { labels: [], values: [] };
+          const set = new Set([].concat(gInq.labels, gOrd.labels));
+          const labels = Array.from(set.values()).sort((a,b)=>String(a).localeCompare(String(b)));
+          const mapInq = new Map(gInq.labels.map((l,i)=>[l, gInq.values[i]]));
+          const mapOrd = new Map(gOrd.labels.map((l,i)=>[l, gOrd.values[i]]));
+          const values = labels.map(l => mapInq.get(l) || 0);
+          const valuesOrd = labels.map(l => mapOrd.get(l) || 0);
           const width = Math.round(chartRect.width);
           const height = 220;
-          const marginLeft = 50, marginRight = 20, marginTop = 20, marginBottom = 28;
+          const marginLeft = 50, marginRight = 20, marginTop = 28, marginBottom = 28;
           const chartWidth = width - marginLeft - marginRight;
           const chartHeight = height - marginTop - marginBottom;
-          const maxVal = values.length ? Math.max.apply(null, values) : 0;
-          const xi = function(i){ if (labels.length <= 1) return marginLeft; return marginLeft + Math.round((i/(labels.length-1)) * chartWidth); };
+          const maxVal = Math.max(values.length ? Math.max.apply(null, values) : 0, valuesOrd.length ? Math.max.apply(null, valuesOrd) : 0);
           const yi = function(v){ if (maxVal === 0) return marginTop + chartHeight; return marginTop + (chartHeight - Math.round((v/maxVal) * chartHeight)); };
-          let d = '';
-          for (let i = 0; i < labels.length; i++) { const x = xi(i), y = yi(values[i]); d += (i === 0 ? 'M ' : ' L ') + x + ' ' + y; }
+          const groupStep = labels.length ? Math.floor(chartWidth / labels.length) : chartWidth;
+          const groupWidth = Math.max(16, Math.min(48, groupStep - 6));
+          const barWidth = Math.max(6, Math.floor((groupWidth - 4) / 2));
           const ticks = 5;
           let xAxis = '';
-          for (let i = 0; i <= ticks; i++) { const idx = Math.round((labels.length - 1) * (i / ticks)); const x = xi(idx); xAxis += '<line x1="'+x+'" y1="'+(marginTop+chartHeight)+'" x2="'+x+'" y2="'+(marginTop+chartHeight+4)+'" stroke="#9ca3af" />' + '<text x="'+x+'" y="'+(marginTop+chartHeight+16)+'" text-anchor="middle" font-size="10" fill="#666">'+labels[idx]+'</text>'; }
+          for (let i = 0; i <= ticks; i++) { const idx = Math.round((labels.length - 1) * (i / ticks)); const gx = marginLeft + Math.round(idx * groupStep) + Math.round(groupStep/2); xAxis += '<line x1="'+gx+'" y1="'+(marginTop+chartHeight)+'" x2="'+gx+'" y2="'+(marginTop+chartHeight+4)+'" stroke="#9ca3af" />' + '<text x="'+gx+'" y="'+(marginTop+chartHeight+16)+'" text-anchor="middle" font-size="10" fill="#666">'+labels[idx]+'</text>'; }
           let yAxis = '';
           for (let i = 0; i <= ticks; i++) { const val = Math.round((maxVal * i) / ticks); const y = yi(val); yAxis += '<line x1="'+marginLeft+'" y1="'+y+'" x2="'+(marginLeft+chartWidth)+'" y2="'+y+'" stroke="#eee" />' + '<text x="'+(marginLeft-6)+'" y="'+(y+3)+'" text-anchor="end" font-size="10" fill="#666">'+val+'</text>'; }
-          svg.innerHTML = '<rect x="0" y="0" width="'+width+'" height="'+height+'" fill="transparent" />' + '<path d="'+d+'" fill="none" stroke="#2563eb" stroke-width="2" />' + '<line x1="'+marginLeft+'" y1="'+(marginTop+chartHeight)+'" x2="'+(marginLeft+chartWidth)+'" y2="'+(marginTop+chartHeight)+'" stroke="#9ca3af" />' + xAxis + yAxis;
+          // grouped bars
+          let bars = '';
+          for (let i = 0; i < labels.length; i++) {
+            const gx = marginLeft + Math.round(i * groupStep) + Math.round((groupStep - groupWidth)/2);
+            const vInq = values[i] || 0; const vOrd = valuesOrd[i] || 0;
+            const hInq = Math.max(1, (maxVal===0?0: Math.round((vInq/maxVal)*chartHeight)));
+            const hOrd = Math.max(1, (maxVal===0?0: Math.round((vOrd/maxVal)*chartHeight)));
+            const xInq = gx; const xOrd = gx + barWidth + 4;
+            const yInq = marginTop + chartHeight - hInq; const yOrd = marginTop + chartHeight - hOrd;
+            bars += '<rect class="bar bar-inq" x="'+xInq+'" y="'+yInq+'" width="'+barWidth+'" height="'+hInq+'" fill="#2563eb" />';
+            bars += '<rect class="bar bar-ord" x="'+xOrd+'" y="'+yOrd+'" width="'+barWidth+'" height="'+hOrd+'" fill="#f28e2b" />';
+          }
+          const legend = '<g><rect x="'+(marginLeft)+'" y="'+(marginTop-18)+'" width="10" height="10" fill="#2563eb" /><text x="'+(marginLeft+14)+'" y="'+(marginTop-10)+'" font-size="10" fill="#666">문의</text><rect x="'+(marginLeft+60)+'" y="'+(marginTop-18)+'" width="10" height="10" fill="#f28e2b" /><text x="'+(marginLeft+74)+'" y="'+(marginTop-10)+'" font-size="10" fill="#666">주문</text></g>';
+          svg.innerHTML = '<rect x="0" y="0" width="'+width+'" height="'+height+'" fill="transparent" />' + legend + bars + '<line x1="'+marginLeft+'" y1="'+(marginTop+chartHeight)+'" x2="'+(marginLeft+chartWidth)+'" y2="'+(marginTop+chartHeight)+'" stroke="#9ca3af" />' + xAxis + yAxis;
           // Hover tooltip on product detail chart
-          const xs = labels.map((_, i) => xi(i));
+          const xs = labels.map((_, i) => marginLeft + Math.round(i * groupStep) + Math.round(groupStep/2));
           svg.onmousemove = function(e){
             if (!pie) return;
             const rect = svg.getBoundingClientRect();
             const cx = e.clientX - rect.left;
             let idx = 0, best = Infinity;
             for (let i = 0; i < xs.length; i++) { const dx = Math.abs(xs[i] - cx); if (dx < best) { best = dx; idx = i; } }
-            pie.innerHTML = '<div class="pie-title">' + labels[idx] + '</div><div class="pie-contents">건수: ' + values[idx] + '</div>';
+            pie.innerHTML = '<div class="pie-title">' + labels[idx] + '</div><div class="pie-contents">문의: ' + (values[idx]||0) + ' · 주문: ' + (valuesOrd[idx]||0) + '</div>';
             pie.style.left = (e.clientX + 12) + 'px';
             pie.style.top = (e.clientY + 12) + 'px';
             pie.classList.remove('hidden');
