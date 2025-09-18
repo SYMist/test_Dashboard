@@ -84,6 +84,7 @@ function readData(csvPath) {
   const codeToName = new Map();
   const dateCounts = new Map();
   const perProductDateCounts = new Map();
+  const rawRows = [];
   let totalInquiriesCount = 0;
   let nullResvCodeCount = 0;
 
@@ -96,6 +97,7 @@ function readData(csvPath) {
     const content = (contentIdx !== -1 && row.length > contentIdx) ? String((row[contentIdx] || '').trim()) : '';
     const reqid = (reqIdx !== -1 && row.length > reqIdx) ? String((row[reqIdx] || '').trim()) : '';
     const name = (nameIdx !== -1 && row.length > nameIdx) ? String((row[nameIdx] || '').trim()) : '';
+    const resvCodeHere = (resvCodeIdx !== -1 && row.length > resvCodeIdx) ? String((row[resvCodeIdx] || '').trim()) : '';
     const createdRaw = (createdIdx !== -1 && row.length > createdIdx) ? String((row[createdIdx] || '').trim()) : '';
     if (!code || !typ || !lang) continue;
     if (name && !codeToName.has(code)) codeToName.set(code, name);
@@ -174,6 +176,7 @@ function readData(csvPath) {
       if (!statusLangType.get(status).has(lang)) statusLangType.get(status).set(lang, new Map());
       statusLangType.get(status).get(lang).set(typ, (statusLangType.get(status).get(lang).get(typ) || 0) + 1);
     }
+    rawRows.push({ id: reqid, resvCode: resvCodeHere, productCode: code, productName: name, lang, type: typ, summary: content, createdAt: createdRaw });
   }
 
   const ordersPath = 'product_order_dummy_database.csv';
@@ -291,11 +294,11 @@ function readData(csvPath) {
   for (const [k, m] of perProductOrderDateCounts.entries()) {
     perProductOrderDateCountsObj[k] = Object.fromEntries(m);
   }
-  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj, perProductOrderDateCounts: perProductOrderDateCountsObj };
+  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj, perProductOrderDateCounts: perProductOrderDateCountsObj, rawRows };
 }
 
 function generateHtml(data, opts = {}) {
-  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts, perProductOrderDateCounts } = data;
+  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts, perProductOrderDateCounts, rawRows } = data;
   const labels = productOrder;
   const values = labels.map(k => totals.get(k) || 0);
   const orderVals = labels.map(k => (orderCounts.get(k) || 0));
@@ -351,15 +354,10 @@ function generateHtml(data, opts = {}) {
         `<text x="${textX}" y="${textY}" text-anchor="middle" font-size="10" fill="#111">${c}</text>`);
       xCursor += w;
     }
+    // 오른쪽에 상품별 총 문의 수만 표기(‘상품 문의’ 라벨은 제외)
     const total = values[idx];
     const xEnd = marginLeft + xScale(total);
-    let rightText = String(total);
-    if (role === 'type' || role === 'lang') {
-      const prodTypeMap = perProductType.get(label);
-      const prodQna = prodTypeMap ? (prodTypeMap.get('상품 문의') || 0) : 0;
-      rightText = `${total} · 상품 문의 ${prodQna}`;
-    }
-    parts.push(`<text x="${xEnd + 6}" y="${y + barHeight / 2 + 3}" text-anchor="start" font-size="10" fill="#333">${rightText}</text>`);
+    parts.push(`<text x="${xEnd + 6}" y="${y + barHeight / 2 + 3}" text-anchor="start" font-size="10" fill="#333">${total}</text>`);
     return `<g>${parts.join('')}</g>`;
   }).join('');
 
@@ -547,6 +545,7 @@ function generateHtml(data, opts = {}) {
     .tab { padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:12px; cursor:pointer; }
     .tab.active { background:#111827; color:#fff; border-color:#111827; }
     .hidden { display:none; }
+    .product-tooltip { position:absolute; z-index: 1200; background:#fff; color:#111; border:1px solid #e5e7eb; border-radius:12px; padding:16px; box-shadow: 0 10px 30px rgba(15,23,42,0.18); width: 100%; max-width: 1000px; }
     .pie-tooltip { position: fixed; z-index: 1000; background:#fff; color:#111; border:1px solid #e5e7eb; border-radius:10px; padding:10px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 320px; max-width: 90vw; }
     .bar-detail { position:absolute; z-index: 2; background:#fff; color:#111; border:1px solid #e5e7eb; border-radius:10px; padding:12px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); width: 720px; max-width: calc(100% - 140px); }
     .bar-detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
@@ -600,6 +599,7 @@ function generateHtml(data, opts = {}) {
     .pie-tooltip { background:#0d1323; color:#e5e7eb; border-color:#1f2937; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
     .pie-title { color:#d1d5db; }
     .pie-legend-item { color:#d1d5db; }
+    .product-tooltip { background:#0d1323; color:#e5e7eb; border-color:#1f2937; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
     .ratios { border-top-color:#1f2937; }
     .ratio-item { color:#d1d5db; }
     .ratio-code { color:#e5e7eb; }
@@ -625,12 +625,6 @@ function generateHtml(data, opts = {}) {
       <label for="filter-product">상품 검색
         <input type="text" id="filter-product" name="filter-product" placeholder="상품명 또는 코드" />
       </label>
-      <label for="filter-sort">정렬
-        <select id="filter-sort" name="filter-sort">
-          <option value="desc">문의 많은 순</option>
-          <option value="asc">문의 적은 순</option>
-        </select>
-      </label>
       <button id="filter-apply" class="tab" type="button" aria-label="필터 적용">적용</button>
     </div>
     <div id="date-activity-card" class="card" style="margin-bottom:12px;">
@@ -646,7 +640,40 @@ function generateHtml(data, opts = {}) {
       </div>
       <div id="date-activity-meta" class="line-chart-meta" style="margin-bottom:6px;"></div>
       <svg id="chart-date-activity" class="line-chart-svg" width="1000" height="220" viewBox="0 0 1000 220"></svg>
-    </div>
+      <div class="card" id="inquiries-table-card" style="margin-top:10px;">
+        <div class="line-chart-header" style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+          <div class="line-chart-title">최근 문의 표</div>
+          <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+            <input id="inq-search" type="text" placeholder="검색 (상품/코드/내용)" style="font-size:12px; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px;" />
+            <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
+              정렬
+              <select id="inq-sort" style="font-size:12px; padding:4px 6px; border:1px solid #e5e7eb; border-radius:6px;">
+                <option value="date_desc" selected>최신순</option>
+                <option value="date_asc">오래된순</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="scroll-y" style="max-height: 320px;">
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead>
+              <tr style="background:#f9fafb; border-bottom:1px solid #e5e7eb;">
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">Created_at</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">요청 ID</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">예약코드</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">상품 코드</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">상품명</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">언어</th>
+                <th style="text-align:left; padding:6px 8px; border-right:1px solid #f1f5f9;">문의 유형</th>
+                <th style="text-align:left; padding:6px 8px;">문의 내용</th>
+              </tr>
+            </thead>
+            <tbody id="inquiries-tbody"></tbody>
+          </table>
+        </div>
+        <div id="inquiries-pagination" style="display:flex; gap:6px; justify-content:flex-end; padding-top:6px;"></div>
+      </div>
+      </div>
     <h1 id="page-title">상품 기반 분석</h1>
     <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
     <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px;">
@@ -667,6 +694,13 @@ function generateHtml(data, opts = {}) {
         <label id="toggle-orders-wrap" style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
           <input type="checkbox" id="toggle-orders" /> 주문량 보기
         </label>
+        <label style="font-size:12px; display:flex; align-items:center; gap:6px;">
+          정렬
+          <select id="sort-prod" name="sort-prod">
+            <option value="desc" selected>문의 많은 순</option>
+            <option value="asc">문의 적은 순</option>
+          </select>
+        </label>
       </div>
       <svg id="chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-ml="${marginLeft}" data-barh="${barHeight}">
         <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
@@ -686,9 +720,16 @@ function generateHtml(data, opts = {}) {
       <div id="bar-detail" class="bar-detail hidden"></div>
       </div>
       <div class="scroll-y hidden" id="scroll-resv">
-        <div id="tabs-resv-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px;">
+        <div id="tabs-resv-dimension" class="tabs" role="tablist" style="margin: 6px 0 6px; align-items:center;">
           <button id="tab-resv-type" class="tab active" role="tab" aria-selected="true">문의 유형</button>
           <button id="tab-resv-lang" class="tab" role="tab" aria-selected="false">언어</button>
+          <label style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
+            정렬
+            <select id="sort-resv" name="sort-resv">
+              <option value="desc" selected>문의 많은 순</option>
+              <option value="asc">문의 적은 순</option>
+            </select>
+          </label>
         </div>
         <svg id="chart-resv" width="${width}" height="${heightResv}" viewBox="0 0 ${width} ${heightResv}">
           <rect x="0" y="0" width="${width}" height="${heightResv}" fill="transparent" />
@@ -707,7 +748,15 @@ function generateHtml(data, opts = {}) {
       <div id="legend-resv" class="legend hidden">${legendHtmlResv}</div>
     </div>
     <div id="resv-ratios-card" class="card hidden" style="margin-top:12px;">
-      <div class="muted" style="margin-bottom:6px;">상품 별 주문 대비 문의 비율</div>
+      <div class="muted" style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">상품 별 주문 대비 문의 비율
+        <label style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
+          정렬
+          <select id="sort-ratios" name="sort-ratios">
+            <option value="desc" selected>문의 많은 순</option>
+            <option value="asc">문의 적은 순</option>
+          </select>
+        </label>
+      </div>
       <div id="resv-ratios" class="ratios">
         <div class="ratios-grid">${ratiosHtml}</div>
       </div>
@@ -719,8 +768,15 @@ function generateHtml(data, opts = {}) {
       </div>
     </div>
     <div class="card hidden" id="resv-code-chart-card" style="margin-top:12px;">
-      <div class="line-chart-header">
+      <div class="line-chart-header" style="display:flex; align-items:center;">
         <div class="line-chart-title">예약코드 별 문의 수</div>
+        <label style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
+          정렬
+          <select id="sort-resv-code" name="sort-resv-code">
+            <option value="desc" selected>문의 많은 순</option>
+            <option value="asc">문의 적은 순</option>
+          </select>
+        </label>
       </div>
       <div class="scroll-y" id="scroll-resv-code">
         <svg id="chart-resv-code" width="1000" height="400" viewBox="0 0 1000 400"></svg>
@@ -731,7 +787,7 @@ function generateHtml(data, opts = {}) {
   <div id="product-tooltip" class="product-tooltip hidden"></div>
   <script>
     (function(){
-      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts })};
+      const DATA = ${JSON.stringify({ types, langs, productOrder: labels, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts, rawRows })};
       const TOTAL = ${total};
 
       const tabAnalProduct = document.getElementById('tab-anal-product');
@@ -855,6 +911,17 @@ function generateHtml(data, opts = {}) {
           '<line x1="' + marginLeft + '" y1="' + (marginTop + chartHeight) + '" x2="' + (marginLeft + chartWidth) + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" />' +
           xAxis + yAxis;
         container.innerHTML = content;
+        // render simple table under chart
+        try {
+          const tbody = document.getElementById('inquiries-tbody');
+          if (tbody) {
+            const list = (DATA.rows || []).slice(0,10);
+            tbody.innerHTML = list.map(function(r){
+              const cols = [r.id||'', r.resvCode||'', r.productCode||'', (DATA.codeNameMap&&DATA.codeNameMap[r.productCode])?DATA.codeNameMap[r.productCode]:(r.productName||''), r.lang||'', r.type||'', (r.summary||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')];
+              return '<tr>'+cols.map((c,i)=>'<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;'+(i<6?' border-right:1px solid #f1f5f9;':'')+'">'+c+'</td>').join('')+'</tr>';
+            }).join('');
+          }
+        } catch (e) {}
 
         // Hover tooltip on top date chart
         try {
@@ -873,17 +940,74 @@ function generateHtml(data, opts = {}) {
           };
           svg.onmouseleave = function(){ if (pie) pie.classList.add('hidden'); };
         } catch (e) {}
+        // Render inquiries table under chart (client-side pagination + search/sort)
+        try {
+          const tbody = document.getElementById('inquiries-tbody');
+          const pag = document.getElementById('inquiries-pagination');
+          const q = document.getElementById('inq-search');
+          const sortSel = document.getElementById('inq-sort');
+          if (!tbody || !pag) return;
+          let page = 1; const SIZE = 10;
+          function normalize(s){ return (s||'').toString().toLowerCase(); }
+          function renderTable(){
+            const rows = (DATA.rawRows || []).slice();
+            const term = normalize(q ? q.value : '');
+            let filtered = term ? rows.filter(function(r){
+              const name = (DATA.codeNameMap && DATA.codeNameMap[r.productCode]) ? DATA.codeNameMap[r.productCode] : (r.productName||'');
+              return normalize(r.productCode).includes(term) || normalize(name).includes(term) || normalize(r.summary).includes(term);
+            }) : rows;
+            const mode = sortSel ? sortSel.value : 'date_desc';
+            filtered.sort(function(a,b){
+              const da = new Date(a.createdAt||''); const db = new Date(b.createdAt||'');
+              if (mode==='date_asc') return da - db;
+              return db - da;
+            });
+            const totalPages = Math.max(1, Math.ceil(filtered.length / SIZE));
+            if (page > totalPages) page = totalPages;
+            const slice = filtered.slice((page-1)*SIZE, page*SIZE);
+            tbody.innerHTML = slice.map(function(r){
+              const name = (DATA.codeNameMap&&DATA.codeNameMap[r.productCode])?DATA.codeNameMap[r.productCode]:(r.productName||'');
+              const idLink = r.id ? '<a href="#" data-reqid="'+r.id+'">'+r.id+'</a>' : '';
+              const resvLink = r.resvCode ? '<a href="#" data-resv="'+r.resvCode+'">'+r.resvCode+'</a>' : '';
+              const created = (r.createdAt||'').slice(0,10);
+              const cols = [created, idLink, resvLink, r.productCode||'', name, r.lang||'', r.type||'', (r.summary||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')];
+              return '<tr>'+cols.map(function(c,i){ return '<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9;'+(i<7?' border-right:1px solid #f1f5f9;':'')+'">'+c+'</td>'; }).join('')+'</tr>';
+            }).join('');
+            let buttons = '';
+            const prevDis = (page<=1) ? 'disabled' : '';
+            const nextDis = (page>=totalPages) ? 'disabled' : '';
+            buttons += '<button class="tab" type="button" data-page="prev" '+prevDis+'>이전</button>';
+            const win = 3;
+            for (let p=1; p<=Math.min(totalPages, win); p++) {
+              const cur = (p===page) ? ' aria-current="true"' : '';
+              buttons += '<button class="tab" type="button" data-page="'+p+'"'+cur+'>'+p+'</button>';
+            }
+            buttons += '<button class="tab" type="button" data-page="next" '+nextDis+'>다음</button>';
+            pag.innerHTML = buttons;
+          }
+          pag.onclick = function(e){
+            const b = e.target.closest('button[data-page]'); if (!b) return;
+            const val = b.getAttribute('data-page');
+            if (val==='prev') page = Math.max(1, page-1);
+            else if (val==='next') page = page+1;
+            else page = Number(val)||1;
+            renderTable();
+          };
+          if (q) q.oninput = function(){ page=1; renderTable(); };
+          if (sortSel) sortSel.onchange = function(){ page=1; renderTable(); };
+          renderTable();
+        } catch (e) {}
       }
 
-      function renderResvCodeChart() {
+      function renderResvCodeChart(mode) {
         const container = document.getElementById('chart-resv-code');
         // entries: [code, count]
         const entries = Object.entries(DATA.resvCodeCounts || {});
-        // Sort by count desc, then code asc for stability
         entries.sort(function(a,b){
           var ca = Number(a[1]) || 0;
           var cb = Number(b[1]) || 0;
-          if (cb !== ca) return cb - ca;
+          if (mode === 'asc') { if (ca !== cb) return ca - cb; }
+          else { if (cb !== ca) return cb - ca; }
           return String(a[0]).localeCompare(String(b[0]));
         });
         const resvCodeLabels = entries.map(function(e){ return e[0]; });
@@ -1032,10 +1156,33 @@ function generateHtml(data, opts = {}) {
           barsResvTypesG.style.display = '';
           barsResvLangsG.style.display = 'none';
         }
-        renderResvCodeChart();
+        const sortSel = document.getElementById('sort-resv-code');
+        renderResvCodeChart(sortSel ? sortSel.value : 'desc');
       }
       tabAnalProduct.addEventListener('click', showAnalProduct);
       tabAnalResv.addEventListener('click', showAnalResv);
+      const sortResvCodeSel = document.getElementById('sort-resv-code');
+      if (sortResvCodeSel) sortResvCodeSel.addEventListener('change', ()=>renderResvCodeChart(sortResvCodeSel.value));
+      const sortRatiosSel = document.getElementById('sort-ratios');
+      function rebuildRatios(sort){
+        const tri = DATA.tri || {};
+        const order = DATA.orderCounts || {};
+        const items = Object.keys(tri).map(prod=>{
+          let inq=0; for (const t in tri[prod]) { const m=tri[prod][t]||{}; for (const l in m) inq+=Number(m[l]||0);} 
+          const ord = Number(order[prod]||0);
+          const pct = ord>0 ? (inq/ord)*100 : null;
+          return { prod, inq, ord, pct };
+        });
+        items.sort((a,b)=> sort==='asc' ? (a.inq-b.inq) : (b.inq-a.inq));
+        const grid = document.querySelector('.ratios-grid');
+        if (!grid) return;
+        grid.innerHTML = items.map(({prod,inq,ord,pct})=>{
+          const name = (DATA.codeNameMap&&DATA.codeNameMap[prod])?DATA.codeNameMap[prod]:prod;
+          const val = pct==null?'-':(Math.round(pct*100)/100).toFixed(2)+'%';
+          return '<div class="ratio-item"><span class="ratio-code">'+name+'</span><span class="ratio-val">'+val+'</span><span class="ratio-detail">('+inq+'/'+ord+')</span></div>';
+        }).join('');
+      }
+      if (sortRatiosSel) sortRatiosSel.addEventListener('change', ()=>rebuildRatios(sortRatiosSel.value||'desc'));
       
       function showType(){
         tabType.classList.add('active');
@@ -1087,6 +1234,94 @@ function generateHtml(data, opts = {}) {
       }
       if (tabProdType) tabProdType.addEventListener('click', showProdType);
       if (tabProdLang) tabProdLang.addEventListener('click', showProdLang);
+
+      // Product sorting
+      function computeProdTotals(){
+        const tri = DATA.tri || {};
+        const totals = {};
+        for (const prod in tri){
+          let s=0; for (const t in tri[prod]){ const m=tri[prod][t]||{}; for (const l in m){ s+=Number(m[l]||0); } }
+          totals[prod]=s;
+        }
+        return totals;
+      }
+      function applyProductSort(sort){
+        const totals = computeProdTotals();
+        const types = DATA.types || [];
+        const langs = DATA.langs || [];
+        const labels = Object.keys(totals).sort((a,b)=> sort==='asc' ? (totals[a]-totals[b]) : (totals[b]-totals[a]));
+        const width = ${width}; const marginLeft=${marginLeft}; const marginTop=${marginTop}; const barHeight=${barHeight}; const barGap=${barGap}; const chartWidth=${chartWidth};
+        // Scale should consider both inquiry totals and order counts to avoid clipping
+        const ordersAll = DATA.orderCounts || {};
+        const maxInquiry = Math.max.apply(null, labels.map(k=>Number(totals[k]||0))) || 0;
+        const maxOrder = Math.max.apply(null, labels.map(k=>Number(ordersAll[k]||0))) || 0;
+        const max = Math.max(maxInquiry, maxOrder);
+        const xScale = (v)=> max===0?0:Math.round((v/max)*chartWidth);
+        // Drawer: adjust svg height and row offsets
+        const svgEl = document.getElementById('chart');
+        if (svgEl) {
+          const baseH = Number(svgEl.dataset.baseh || svgEl.getAttribute('height') || ${height});
+          svgEl.dataset.baseh = String(baseH);
+          svgEl.setAttribute('height', OPEN_PROD ? String(baseH + DRAWER_H) : String(baseH));
+        }
+        const openIndex = OPEN_PROD ? labels.indexOf(OPEN_PROD) : -1;
+        function colorOfType(t){ const palette=['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab']; return palette[types.indexOf(t)%palette.length]; }
+        function colorOfLang(l){ const palette=['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab']; return palette[langs.indexOf(l)%palette.length]; }
+        // y labels
+        const yHtml = labels.map(function(label, idx){
+          const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
+          const yy = marginTop + idx*(barHeight+barGap) + barHeight/2 + 3 + offset;
+          const name = (DATA.codeNameMap&&DATA.codeNameMap[label])?DATA.codeNameMap[label]:label;
+          return '<text class="prod-label" data-prod="'+label+'" x="'+(marginLeft-8)+'" y="'+yy+'" text-anchor="end" font-size="10" fill="#333" style="cursor:pointer;">'+name+'</text>';
+        }).join('');
+        const yNode = document.getElementById('ylabels-products'); if (yNode) yNode.innerHTML = yHtml;
+        // bars
+        function buildBars(mode){
+          return labels.map(function(label, idx){
+            const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
+            const baseY = marginTop + idx*(barHeight+barGap) + offset;
+            let parts = []; let cursor = marginLeft;
+            if (mode==='type'){
+              for (let ti=0; ti<types.length; ti++){
+                const t = types[ti];
+                const langMap = ((DATA.tri[label]||{})[t]||{}); 
+                const cnt = Object.values(langMap).reduce(function(a,b){return a+Number(b||0);},0); if (cnt<=0) continue;
+                const w = Math.max(1,xScale(cnt));
+                parts.push('<rect class="seg seg-type" data-role="type" data-prod="'+label+'" data-cat="'+t+'" x="'+cursor+'" y="'+baseY+'" width="'+w+'" height="'+barHeight+'" fill="'+colorOfType(t)+'" />');
+                cursor += w;
+              }
+            } else {
+              for (let li=0; li<langs.length; li++){
+                const l = langs[li];
+                let cnt=0; const byType = DATA.tri[label]||{}; for (const t in byType){ cnt+=Number((byType[t]||{})[l]||0); }
+                if (cnt<=0) continue;
+                const w = Math.max(1,xScale(cnt));
+                parts.push('<rect class="seg seg-lang" data-role="lang" data-prod="'+label+'" data-cat="'+l+'" x="'+cursor+'" y="'+baseY+'" width="'+w+'" height="'+barHeight+'" fill="'+colorOfLang(l)+'" />');
+                cursor += w;
+              }
+            }
+            const xEnd = marginLeft + xScale(totals[label]||0);
+            parts.push('<text x="'+(xEnd+6)+'" y="'+(baseY + barHeight/2 + 3)+'" text-anchor="start" font-size="10" fill="#333">'+(totals[label]||0)+'</text>');
+            return '<g>'+parts.join('')+'</g>';
+          }).join('');
+        }
+        const bt = document.getElementById('bars-type'); if (bt) bt.innerHTML = buildBars('type');
+        const bl = document.getElementById('bars-lang'); if (bl) bl.innerHTML = buildBars('lang');
+        // orders overlay
+        const orders = DATA.orderCounts || {};
+        const bo = document.getElementById('bars-orders'); if (bo){
+          bo.innerHTML = labels.map(function(label, idx){
+            const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
+            const yv = marginTop + idx*(barHeight+barGap) + offset;
+            const ord = Number(orders[label]||0); if (!ord) return '';
+            const w = Math.max(1,xScale(ord)); const hb = Math.max(6, Math.round(barHeight*0.35)); const yo = yv + (barHeight-hb);
+            return '<rect class="orders-bar" data-prod="'+label+'" x="'+marginLeft+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="#9ca3af" fill-opacity="0.6" />';
+          }).join('');
+        }
+        attachProductLabelClick(); attachHover();
+      }
+      const sortProdSel = document.getElementById('sort-prod');
+      if (sortProdSel) sortProdSel.addEventListener('change', ()=>applyProductSort(sortProdSel.value||'desc'));
       if (toggleOrders) toggleOrders.addEventListener('change', function(){
         if (!barsOrders) return;
         const isProductTab = tabAnalProduct.classList.contains('active');
@@ -1401,27 +1636,19 @@ function generateHtml(data, opts = {}) {
         const closeBtn = '<button class="bar-detail-close" style="position:absolute; top:10px; right:10px;">닫기</button>';
         prodTip.style.width = width + 'px';
         prodTip.innerHTML = titleHtml + closeBtn + tabsHtml + head + svgHtml;
-        // Position near clicked label and keep within viewport (fixed positioning)
+        // Position near clicked label and keep within viewport (overlay)
         const vpW = window.innerWidth || document.documentElement.clientWidth || 1280;
         const vpH = window.innerHeight || document.documentElement.clientHeight || 800;
         const r = (srcEl && srcEl.getBoundingClientRect) ? srcEl.getBoundingClientRect() : { left: chartRect.left, top: 80, bottom: 120 };
         prodTip.classList.remove('hidden');
-        // initial measure
         let tipRect = prodTip.getBoundingClientRect();
         let left = Math.max(10, Math.round(chartRect.left));
         if (left + tipRect.width + 10 > vpW) left = Math.max(10, vpW - tipRect.width - 10);
-        // Prefer above the label; fallback to below if not enough space
         let top = Math.round(r.top - 10 - tipRect.height);
         if (top < 10) top = Math.min(vpH - tipRect.height - 10, Math.round(r.bottom + 10));
         if (top < 10) top = 10;
         prodTip.style.left = left + 'px';
         prodTip.style.top = top + 'px';
-        // re-measure and clamp horizontally if needed
-        tipRect = prodTip.getBoundingClientRect();
-        if (tipRect.right > vpW - 10) {
-          left = Math.max(10, vpW - tipRect.width - 10);
-          prodTip.style.left = left + 'px';
-        }
         const btnClose = prodTip.querySelector('.bar-detail-close');
         if (btnClose) btnClose.addEventListener('click', hideProductTip);
         // Outside click closes
