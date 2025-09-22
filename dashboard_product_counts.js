@@ -61,6 +61,7 @@ function readData(csvPath) {
   let reqIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '요청 ID');
   let nameIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '상품명');
   let createdIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === 'createdAt');
+  let insightIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '인사이트');
 
   const perProductType = new Map();
   const perProductLang = new Map();
@@ -99,6 +100,7 @@ function readData(csvPath) {
     const name = (nameIdx !== -1 && row.length > nameIdx) ? String((row[nameIdx] || '').trim()) : '';
     const resvCodeHere = (resvCodeIdx !== -1 && row.length > resvCodeIdx) ? String((row[resvCodeIdx] || '').trim()) : '';
     const createdRaw = (createdIdx !== -1 && row.length > createdIdx) ? String((row[createdIdx] || '').trim()) : '';
+    const insightRaw = (insightIdx !== -1 && row.length > insightIdx) ? String((row[insightIdx] || '').trim()) : '';
     if (!code || !typ || !lang) continue;
     if (name && !codeToName.has(code)) codeToName.set(code, name);
     if (createdRaw) {
@@ -176,7 +178,7 @@ function readData(csvPath) {
       if (!statusLangType.get(status).has(lang)) statusLangType.get(status).set(lang, new Map());
       statusLangType.get(status).get(lang).set(typ, (statusLangType.get(status).get(lang).get(typ) || 0) + 1);
     }
-    rawRows.push({ id: reqid, resvCode: resvCodeHere, productCode: code, productName: name, lang, type: typ, summary: content, createdAt: createdRaw });
+    rawRows.push({ id: reqid, resvCode: resvCodeHere, productCode: code, productName: name, lang, type: typ, summary: content, createdAt: createdRaw, insight: /^true$/i.test(insightRaw) || insightRaw === '1' || insightRaw === 'TRUE' });
   }
 
   const ordersPath = 'product_order_dummy_database.csv';
@@ -678,8 +680,6 @@ function generateHtml(data, opts = {}) {
     <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
     <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px;">
       <button id="tab-anal-product" class="tab active" role="tab" aria-selected="true">상품 기반 분석</button>
-      <button id="tab-anal-resv" class="tab" role="tab" aria-selected="false">예약 기반 분석</button>
-      ${jsonMode ? '' : '<a id="btn-anal-json" class="tab" role="button" href="dashboard_product_counts_json.html" title="user_inquiry_from_response.csv 기반">상품 기반 분석(json)</a>'}
     </div>
     <div id="resv-null-summary" class="muted hidden" style="margin: 6px 0 2px;">비예약 문의 비율: ${reservationNullPercent.toFixed(2)}%</div>
     <div id="tabs-dimension" class="tabs" role="tablist">
@@ -1076,18 +1076,21 @@ function generateHtml(data, opts = {}) {
 
       function showAnalProduct(){
         tabAnalProduct.classList.add('active');
-        tabAnalResv.classList.remove('active');
+        if (tabAnalResv) {
+          tabAnalResv.classList.remove('active');
+          tabAnalResv.setAttribute('aria-selected','false');
+        }
         tabAnalProduct.setAttribute('aria-selected','true');
-        tabAnalResv.setAttribute('aria-selected','false');
         tabsDimension.style.display = 'none';
         if (barsResv) barsResv.style.display = 'none';
         if (barsResvProduct) barsResvProduct.style.display = 'none';
         legendResv.classList.add('hidden');
-        scrollResv.classList.add('hidden');
+        // 예약 상태 Y축 차트 섹션은 숨김 유지
+        if (scrollResv) scrollResv.classList.add('hidden');
         scrollProducts.classList.remove('hidden');
-        if (resvRatiosCard) resvRatiosCard.classList.add('hidden');
-        if (resvLangTypeCard) resvLangTypeCard.classList.add('hidden');
-        if (resvCodeChartCard) resvCodeChartCard.classList.add('hidden');
+        if (resvRatiosCard) resvRatiosCard.classList.remove('hidden');
+        if (resvLangTypeCard) resvLangTypeCard.classList.remove('hidden');
+        if (resvCodeChartCard) resvCodeChartCard.classList.remove('hidden');
         if (tabProdType) {
           tabProdType.classList.add('active');
           tabProdType.setAttribute('aria-selected','true');
@@ -1111,6 +1114,13 @@ function generateHtml(data, opts = {}) {
         const resvNull = document.getElementById('resv-null-summary');
         if (resvNull) resvNull.classList.add('hidden');
         if (barsOrders) barsOrders.style.display = (toggleOrders && toggleOrders.checked) ? '' : 'none';
+        // 예약코드 차트 렌더
+        try {
+          const sortSel = document.getElementById('sort-resv-code');
+          if (typeof renderResvCodeChart === 'function') {
+            renderResvCodeChart(sortSel ? sortSel.value : 'desc');
+          }
+        } catch (e) {}
       }
       function showAnalResv(){
         tabAnalResv.classList.add('active');
@@ -1160,7 +1170,7 @@ function generateHtml(data, opts = {}) {
         renderResvCodeChart(sortSel ? sortSel.value : 'desc');
       }
       tabAnalProduct.addEventListener('click', showAnalProduct);
-      tabAnalResv.addEventListener('click', showAnalResv);
+      if (tabAnalResv) tabAnalResv.addEventListener('click', showAnalResv);
       const sortResvCodeSel = document.getElementById('sort-resv-code');
       if (sortResvCodeSel) sortResvCodeSel.addEventListener('change', ()=>renderResvCodeChart(sortResvCodeSel.value));
       const sortRatiosSel = document.getElementById('sort-ratios');
