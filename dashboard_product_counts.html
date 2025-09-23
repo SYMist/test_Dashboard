@@ -126,6 +126,7 @@
         <div class="line-chart-title">일자 별 문의 수</div>
         <div id="tabs-date" class="tabs" role="tablist" style="margin:0; margin-left:auto;">
           <button id="tab-date-d" class="tab active" role="tab" aria-selected="true">일 기준</button>
+          <button id="tab-date-w" class="tab" role="tab" aria-selected="false">주 기준</button>
           <button id="tab-date-m" class="tab" role="tab" aria-selected="false">월 기준</button>
           <button id="tab-date-q" class="tab" role="tab" aria-selected="false">분기 기준</button>
           <button id="tab-date-h" class="tab" role="tab" aria-selected="false">반기 기준</button>
@@ -434,12 +435,23 @@
             else if (mode === 'q') { const q = Math.floor((m-1)/3)+1; key = y + '-Q' + q; }
             else if (mode === 'h') { const h = (m <= 6) ? 'H1' : 'H2'; key = y + '-' + h; }
             else if (mode === 'y') key = String(y);
+            else if (mode === 'w') {
+              // ISO week (UTC-based) key: YYYY-Www
+              const parts = d.split('-');
+              const dt = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+              const day = dt.getUTCDay() || 7;
+              dt.setUTCDate(dt.getUTCDate() + 4 - day);
+              const year = dt.getUTCFullYear();
+              const yearStart = new Date(Date.UTC(year, 0, 1));
+              const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+              key = year + '-W' + pad2(week);
+            }
             // default 'd' keeps YYYY-MM-DD
             map.set(key, (map.get(key) || 0) + c);
           }
           const labels = Array.from(map.keys());
           labels.sort(function(a,b){
-            if (mode === 'd' || mode === 'm' || mode === 'y') return String(a).localeCompare(String(b));
+            if (mode === 'd' || mode === 'm' || mode === 'y' || mode === 'w') return String(a).localeCompare(String(b));
             // q/h need custom within year
             const ay = Number(String(a).slice(0,4));
             const by = Number(String(b).slice(0,4));
@@ -458,16 +470,26 @@
           return { labels, values: vals };
         }
 
-        const modeSafe = (mode === 'm' || mode === 'q' || mode === 'h' || mode === 'y') ? mode : 'd';
+        const modeSafe = (mode === 'm' || mode === 'q' || mode === 'h' || mode === 'y' || mode === 'w') ? mode : 'd';
         const grouped = groupEntries(dayEntries, modeSafe);
         const labels = grouped.labels;
         const values = grouped.values;
         const minDate = labels[0];
         const maxDate = labels[labels.length - 1];
         const total = values.reduce(function(a,b){ return a+b; }, 0);
-        const unitMap = { d: '일', m: '월', q: '분기', h: '반기', y: '연' };
+        const unitMap = { d: '일', w: '주', m: '월', q: '분기', h: '반기', y: '연' };
+        const prevLabel = { d: '전일', w: '전주', m: '전월', q: '전분기', h: '전반기', y: '전년' };
+        // 전 기간 대비 증감 계산 (가장 최근 버킷 기준)
+        let deltaText = '';
+        if (values && values.length >= 2) {
+          const curr = Number(values[values.length - 1] || 0);
+          const prev = Number(values[values.length - 2] || 0);
+          const diff = curr - prev;
+          const sign = diff > 0 ? '+' : (diff < 0 ? '' : '');
+          deltaText = ' · ' + prevLabel[modeSafe] + ' 대비 ' + sign + diff;
+        }
         const meta = document.getElementById('date-activity-meta');
-        if (meta) meta.textContent = '단위: ' + unitMap[modeSafe] + ' · 기간: ' + minDate + ' ~ ' + maxDate + ' · 총 ' + total;
+        if (meta) meta.textContent = '단위: ' + unitMap[modeSafe] + ' · 기간: ' + minDate + ' ~ ' + maxDate + ' · 총 ' + total + deltaText;
 
         const width = 1000, height = 220;
         const marginLeft = 50, marginRight = 20, marginTop = 20, marginBottom = 28;
@@ -1377,6 +1399,7 @@
         const titleHtml = '<div class="product-tooltip-title">' + (name ? name : prod) + '<span style="margin-left:8px; font-size:12px; color:#6b7280;">· 문의 수/주문 수 = ' + inqTotal + '/' + ordTotal + (pct?(' '+pct):'') + '</span></div>';
         const tabsHtml = '<div id="tabs-date2" class="tabs" role="tablist" style="margin:0 0 6px auto;">' +
           '<button id="tab2-date-d" class="tab active" role="tab" aria-selected="true">일 기준</button>'+
+          '<button id="tab2-date-w" class="tab" role="tab" aria-selected="false">주 기준</button>'+
           '<button id="tab2-date-m" class="tab" role="tab" aria-selected="false">월 기준</button>'+
           '<button id="tab2-date-q" class="tab" role="tab" aria-selected="false">분기 기준</button>'+
           '<button id="tab2-date-h" class="tab" role="tab" aria-selected="false">반기 기준</button>'+
@@ -1425,11 +1448,21 @@
             else if (mode === 'q') { const q = Math.floor((m-1)/3)+1; key = y + '-Q' + q; }
             else if (mode === 'h') { const h = (m <= 6) ? 'H1' : 'H2'; key = y + '-' + h; }
             else if (mode === 'y') key = String(y);
+            else if (mode === 'w') {
+              const parts = String(d).split('-');
+              const dt = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+              const day = dt.getUTCDay() || 7;
+              dt.setUTCDate(dt.getUTCDate() + 4 - day);
+              const year = dt.getUTCFullYear();
+              const yearStart = new Date(Date.UTC(year, 0, 1));
+              const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+              key = year + '-W' + pad2(week);
+            }
             map.set(key, (map.get(key) || 0) + c);
           }
           let labels = Array.from(map.keys());
           labels.sort((a,b)=>{
-            if (mode === 'd' || mode === 'm' || mode === 'y') return String(a).localeCompare(String(b));
+            if (mode === 'd' || mode === 'm' || mode === 'y' || mode === 'w') return String(a).localeCompare(String(b));
             const ay = Number(String(a).slice(0,4));
             const by = Number(String(b).slice(0,4));
             if (ay !== by) return ay - by;
@@ -1520,16 +1553,18 @@
         }
 
         function setMode(mode){
-          const ids = [['d','tab2-date-d'],['m','tab2-date-m'],['q','tab2-date-q'],['h','tab2-date-h'],['y','tab2-date-y']];
+          const ids = [['d','tab2-date-d'],['w','tab2-date-w'],['m','tab2-date-m'],['q','tab2-date-q'],['h','tab2-date-h'],['y','tab2-date-y']];
           ids.forEach(([k,id])=>{ const el = document.getElementById(id); if (el){ const on = (k===mode); el.classList.toggle('active', on); el.setAttribute('aria-selected', on?'true':'false'); }});
           render(mode);
         }
         const td = document.getElementById('tab2-date-d');
+        const tw = document.getElementById('tab2-date-w');
         const tm = document.getElementById('tab2-date-m');
         const tq = document.getElementById('tab2-date-q');
         const th = document.getElementById('tab2-date-h');
         const ty = document.getElementById('tab2-date-y');
         if (td) td.addEventListener('click', ()=>setMode('d'));
+        if (tw) tw.addEventListener('click', ()=>setMode('w'));
         if (tm) tm.addEventListener('click', ()=>setMode('m'));
         if (tq) tq.addEventListener('click', ()=>setMode('q'));
         if (th) th.addEventListener('click', ()=>setMode('h'));
@@ -1540,6 +1575,7 @@
       function setDateMode(mode) {
         const tabs = [
           ['d', document.getElementById('tab-date-d')],
+          ['w', document.getElementById('tab-date-w')],
           ['m', document.getElementById('tab-date-m')],
           ['q', document.getElementById('tab-date-q')],
           ['h', document.getElementById('tab-date-h')],
@@ -1554,11 +1590,13 @@
         renderDateActivity(mode);
       }
       const tbD = document.getElementById('tab-date-d');
+      const tbW = document.getElementById('tab-date-w');
       const tbM = document.getElementById('tab-date-m');
       const tbQ = document.getElementById('tab-date-q');
       const tbH = document.getElementById('tab-date-h');
       const tbY = document.getElementById('tab-date-y');
       if (tbD) tbD.addEventListener('click', () => setDateMode('d'));
+      if (tbW) tbW.addEventListener('click', () => setDateMode('w'));
       if (tbM) tbM.addEventListener('click', () => setDateMode('m'));
       if (tbQ) tbQ.addEventListener('click', () => setDateMode('q'));
       if (tbH) tbH.addEventListener('click', () => setDateMode('h'));
