@@ -874,7 +874,7 @@ function generateHtml(data, opts = {}) {
       </div>
     <h1 id="page-title">상품 기반 분석</h1>
     <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
-    <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px;">
+    <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px; display:none;">
       <button id="tab-anal-product" class="tab active" role="tab" aria-selected="true">상품 기반 분석</button>
     </div>
     <div id="resv-null-summary" class="muted hidden" style="margin: 6px 0 2px;">비예약 문의 비율: ${reservationNullPercent.toFixed(2)}%</div>
