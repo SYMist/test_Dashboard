@@ -100,7 +100,7 @@
 ## 백엔드
 - 데이터 소스/스키마
   - user_inquiry (user_inquiry_dummy_database.csv)
-    - 상품 코드: id=41989966629273인 custom_fields의 값에서 마지막 5자리 수 추출 / 유저가 입력한 spot 코드
+    - 상품 코드: id=41989966629273인 custom_fields의 값에서 마지막 5자리 수 추출 또는 유저가 입력한 spot 코드
     - 상품 명: id=41989966629273인 custom_fields의 스팟 코드로 spot_translation에서 language='ko'인 spot_name 매핑
     - 언어: id=41989966629273인 custom_fields의 locale (예: zh-TW)
     - 카테고리: id=41988850452761인 custom_fields

@@ -293,6 +293,33 @@
   - 인사이트 토글(전역): 전체/인사이트 데이터 전환, 상태 로컬 저장
   - 전역 필터(상단 툴바): 기간/검색 적용 시 전체 시각화에 공통 반영
 
+### 요구사항 문서 구조 개편 및 스키마 확정 (2025-09-23)
+- 문서 타이틀을 ‘유저 플로우’로 변경하고, 하단에 ‘요구사항’ 섹션을 신설(프론트엔드/백엔드로 구분, 차트별 기술)
+- 전역 요소 섹션 분리: 인사이트 보기 토글, 전역 기간/검색 필터를 별도로 서술
+- 최근 문의 표 링크 동작 명시: 요청 ID→젠데스크 문의 상세, 예약코드→어드민 예약 상세(새 탭)
+- 예약코드 별 문의 수 차트 요구사항 삭제(요구 반영)
+- (임시) 접근성/반응형 요구 추가 후 요청에 따라 제거(향후 별도 문서로 재정리 예정)
+- 백엔드 데이터 소스/스키마 확정
+  - user_inquiry(user_inquiry_dummy_database.csv)
+    - 상품 코드: custom_fields[id=41989966629273]의 값에서 마지막 5자리 추출(spot 코드)
+    - 상품 명: 동일 필드의 스팟 코드 → spot_translation(language='ko').spot_name 매핑
+    - 언어: custom_fields[id=41989966629273]의 locale(예: zh-TW)
+    - 카테고리: custom_fields[id=41988850452761]
+    - 문의 유형: custom_fields[id=41988618714009]
+    - 문의 내용: ticket_summary
+    - 요청 ID: id
+    - 예약코드: custom_fields[id=41989351980441]
+    - 예약 상태: 미사용
+    - createdAt: created_at
+    - 대/세부 카테고리 파생: custom_values 중 id=41988850452761의 value를 '_' 기준 파싱(대·세부 저장)
+  - product_order(product_order_dummy_database.csv)
+    - 주문 ID: reserve.code
+    - 상품 코드: custom_fields[id=41989966629273] 값의 마지막 5자리 추출
+    - 상품 명: 동일 스팟 코드 → spot_translation(language='ko').spot_name 매핑
+    - 주문 일시: reserve.created_at
+    - 수량: reserve.order_number
+    - 주문 상태/결제 수단/주문 금액: 미사용(수집/전송 제외)
+
 ### 더미 CSV 스키마 조정(카테고리 → 대카테고리)
 - `user_inquiry_dummy_database.csv`의 열 이름 ‘카테고리’를 ‘대카테고리’로 변경
 - 해당 열의 값은 ‘여행’/‘쇼핑’/‘어학당’ 3종으로 정규화(기존 다른 값들은 ‘여행’으로 맵핑)
