@@ -949,6 +949,8 @@ function generateHtml(data, opts = {}) {
           <select id="sort-ratios" name="sort-ratios">
             <option value="desc" selected>문의 많은 순</option>
             <option value="asc">문의 적은 순</option>
+            <option value="pct_desc">백분위 높은 순</option>
+            <option value="pct_asc">백분위 낮은 순</option>
           </select>
         </label>
       </div>
@@ -958,7 +960,17 @@ function generateHtml(data, opts = {}) {
       </div>
     </div>
     <div id="resv-langtype-card" class="card hidden" style="margin-top:12px;">
-      <div class="muted" style="margin-bottom:6px;">언어별 문의 유형 분포</div>
+      <div class="muted" style="margin-bottom:6px; display:flex; align-items:center; gap:8px;">언어별 문의 유형 분포
+        <label style="margin-left:auto; font-size:12px; display:flex; align-items:center; gap:6px;">
+          정렬
+          <select id="sort-langtype" name="sort-langtype">
+            <option value="desc" selected>문의 많은 순</option>
+            <option value="asc">문의 적은 순</option>
+            <option value="pct_desc">백분위 높은 순</option>
+            <option value="pct_asc">백분위 낮은 순</option>
+          </select>
+        </label>
+      </div>
       <div class="lang-type-section">
         <div class="lt-cards full-only">${langTypeCards}</div>
         <div class="lt-cards insight-only">${langTypeCardsI}</div>
@@ -999,6 +1011,7 @@ function generateHtml(data, opts = {}) {
             if (typeof applyProductSort==='function') { const sp = document.getElementById('sort-prod'); applyProductSort(sp?sp.value:'desc'); }
             if (typeof renderResvCodeChart==='function') { const s = document.getElementById('sort-resv-code'); renderResvCodeChart(s?s.value:'desc'); }
             if (typeof rebuildRatios==='function') { const s2 = document.getElementById('sort-ratios'); rebuildRatios(s2?s2.value:'desc'); }
+            if (typeof rebuildLangType==='function') { const s3 = document.getElementById('sort-langtype'); rebuildLangType(s3?s3.value:'desc'); }
             const desc = document.getElementById('chart-desc');
             if (desc) {
               let total = 0; const tri = DATA.tri || {};
@@ -1407,7 +1420,25 @@ function generateHtml(data, opts = {}) {
           const pct = ord>0 ? (inq/ord)*100 : null;
           return { prod, inq, ord, pct };
         });
-        items.sort((a,b)=> sort==='asc' ? (a.inq-b.inq) : (b.inq-a.inq));
+        if (sort === 'pct_desc') {
+          items.sort((a,b)=>{
+            const ap = (a.pct==null?-Infinity:a.pct);
+            const bp = (b.pct==null?-Infinity:b.pct);
+            if (bp !== ap) return bp - ap;
+            return String(a.prod).localeCompare(String(b.prod));
+          });
+        } else if (sort === 'pct_asc') {
+          items.sort((a,b)=>{
+            const ap = (a.pct==null?Infinity:a.pct);
+            const bp = (b.pct==null?Infinity:b.pct);
+            if (ap !== bp) return ap - bp;
+            return String(a.prod).localeCompare(String(b.prod));
+          });
+        } else if (sort === 'asc') {
+          items.sort((a,b)=> (a.inq-b.inq) || String(a.prod).localeCompare(String(b.prod)));
+        } else {
+          items.sort((a,b)=> (b.inq-a.inq) || String(a.prod).localeCompare(String(b.prod)));
+        }
         const grid = document.querySelector(on ? '#resv-ratios .ratios-grid.insight-only' : '#resv-ratios .ratios-grid.full-only');
         if (!grid) return;
         grid.innerHTML = items.map(({prod,inq,ord,pct})=>{
@@ -1416,7 +1447,61 @@ function generateHtml(data, opts = {}) {
           return '<div class="ratio-item"><span class="ratio-code">'+name+'</span><span class="ratio-val">'+val+'</span><span class="ratio-detail">('+inq+'/'+ord+')</span></div>';
         }).join('');
       }
-      if (sortRatiosSel) sortRatiosSel.addEventListener('change', ()=>rebuildRatios(sortRatiosSel.value||'desc'));
+  if (sortRatiosSel) sortRatiosSel.addEventListener('change', ()=>rebuildRatios(sortRatiosSel.value||'desc'));
+  const sortLangTypeSel = document.getElementById('sort-langtype');
+  function rebuildLangType(sort){
+    const on = document.body.classList.contains('insight-on');
+    const tri = DATA.tri || {};
+    const typesArr = DATA.types || [];
+    const langsArr = DATA.langs || [];
+    // Build lang -> type -> count from tri
+    const langType = {};
+    for (const prod in tri){
+      const byType = tri[prod] || {};
+      for (const t in byType){
+        const byLang = byType[t] || {};
+        for (const l in byLang){
+          const c = Number(byLang[l]||0);
+          if (!langType[l]) langType[l] = {};
+          langType[l][t] = (langType[l][t]||0) + c;
+        }
+      }
+    }
+    const cardsHtml = langsArr.map(function(l){
+      const tMap = langType[l] || {};
+      const totalL = Object.values(tMap).reduce((a,b)=>a+Number(b||0),0);
+      let rows = typesArr.map(function(t){
+        const c = Number(tMap[t]||0);
+        const pct = totalL>0 ? (c/totalL)*100 : null;
+        return { t, c, pct };
+      }).filter(x=>x.c>0);
+      if (sort === 'pct_desc') {
+        rows.sort((a,b)=>{
+          const ap = (a.pct==null?-Infinity:a.pct);
+          const bp = (b.pct==null?-Infinity:b.pct);
+          if (bp!==ap) return bp-ap; return a.t.localeCompare(b.t);
+        });
+      } else if (sort === 'pct_asc') {
+        rows.sort((a,b)=>{
+          const ap = (a.pct==null?Infinity:a.pct);
+          const bp = (b.pct==null?Infinity:b.pct);
+          if (ap!==bp) return ap-bp; return a.t.localeCompare(b.t);
+        });
+      } else if (sort === 'asc') {
+        rows.sort((a,b)=> (a.c-b.c) || a.t.localeCompare(b.t));
+      } else { // desc default
+        rows.sort((a,b)=> (b.c-a.c) || a.t.localeCompare(b.t));
+      }
+      const list = rows.map(function(x, i){
+        const pctText = (x.pct==null? '0%' : (Math.round(x.pct) + '%'));
+        return '<div class="lt-item">'+(i+1)+'위 - '+x.t+' ('+pctText+')</div>';
+      }).join('');
+      return '<div class="lt-card"><div class="lt-card-title">'+l+'</div><div class="lt-list">'+(list || '<div class="lt-item">데이터 없음</div>')+'</div></div>';
+    }).join('');
+    const wrap = document.querySelector(on ? '#resv-langtype-card .lt-cards.insight-only' : '#resv-langtype-card .lt-cards.full-only');
+    if (wrap) wrap.innerHTML = cardsHtml;
+  }
+  if (sortLangTypeSel) sortLangTypeSel.addEventListener('change', ()=>rebuildLangType(sortLangTypeSel.value||'desc'));
       
       function showType(){
         tabType.classList.add('active');
