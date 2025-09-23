@@ -908,7 +908,7 @@ function generateHtml(data, opts = {}) {
         <g id="bars-lang" style="display:none"><g class="full-only">${barsSvgLang}</g><g class="insight-only">${barsSvgLangI}</g></g>
         <g id="bars-resv" style="display:none">${typeof barsSvgResvTypes !== 'undefined' ? barsSvgResvTypes : barsSvgResv}</g>
         <g id="bars-resv-product" style="display:none">${barsSvgResvProduct}</g>
-        <g id="bars-orders" style="display:none"><g class="full-only">${barsSvgOrders}</g><g class="insight-only">${barsSvgOrdersI}</g></g>
+        <g id="bars-orders" style="display:none"></g>
         <g id="ylabels-products"><g class="full-only">${yLabelsProductsSvg}</g><g class="insight-only">${yLabelsProductsSvgI}</g></g>
         <g id="ylabels-resv" style="display:none">${yLabelsResvSvg}</g>
       </svg>
@@ -1349,7 +1349,21 @@ function generateHtml(data, opts = {}) {
         if (chartDesc) chartDesc.textContent = 'X축: 건수 · Y축: 상품명 (총 ' + TOTAL + ')';
         const resvNull = document.getElementById('resv-null-summary');
         if (resvNull) resvNull.classList.add('hidden');
-        if (barsOrders) barsOrders.style.display = (toggleOrders && toggleOrders.checked) ? '' : 'none';
+        // Ensure overlays are (re)built for current state
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch (e) {}
+        if (barsOrders) {
+          // Set group visibility to match current internal tab
+          try {
+            const isLangInternal = (tabProdLang && tabProdLang.classList.contains('active'));
+            const ot = document.querySelector('#bars-orders #orders-type');
+            const ol = document.querySelector('#bars-orders #orders-lang');
+            if (ot && ol) {
+              ot.style.display = isLangInternal ? 'none' : '';
+              ol.style.display = isLangInternal ? '' : 'none';
+            }
+          } catch (e) {}
+          barsOrders.style.display = (toggleOrders && toggleOrders.checked) ? '' : 'none';
+        }
         // 예약코드 차트 렌더
         try {
           const sortSel = document.getElementById('sort-resv-code');
@@ -1513,6 +1527,7 @@ function generateHtml(data, opts = {}) {
         legendType.classList.remove('hidden');
         legendLang.classList.add('hidden');
         hidePie();
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
       }
       function showLang(){
         tabLang.classList.add('active');
@@ -1524,6 +1539,7 @@ function generateHtml(data, opts = {}) {
         legendLang.classList.remove('hidden');
         legendType.classList.add('hidden');
         hidePie();
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
       }
       tabType.addEventListener('click', showType);
       tabLang.addEventListener('click', showLang);
@@ -1534,6 +1550,8 @@ function generateHtml(data, opts = {}) {
           tabProdLang.classList.remove('active');
           tabProdLang.setAttribute('aria-selected','false');
         }
+        STATE.dim = 'type';
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
         barsType.style.display = '';
         barsLang.style.display = 'none';
         legendType.classList.remove('hidden');
@@ -1546,6 +1564,8 @@ function generateHtml(data, opts = {}) {
           tabProdType.classList.remove('active');
           tabProdType.setAttribute('aria-selected','false');
         }
+        STATE.dim = 'lang';
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
         barsLang.style.display = '';
         barsType.style.display = 'none';
         legendLang.classList.remove('hidden');
@@ -1564,7 +1584,9 @@ function generateHtml(data, opts = {}) {
         }
         return totals;
       }
+      const STATE = { dim: 'type' };
       function applyProductSort(sort){
+        const DEBUG_ORDERS = false; // toggle to true for console logs
         const totals = computeProdTotals();
         const types = DATA.types || [];
         const langs = DATA.langs || [];
@@ -1581,14 +1603,18 @@ function generateHtml(data, opts = {}) {
         if (svgEl) {
           const baseH = Number(svgEl.dataset.baseh || svgEl.getAttribute('height') || ${height});
           svgEl.dataset.baseh = String(baseH);
-          svgEl.setAttribute('height', OPEN_PROD ? String(baseH + DRAWER_H) : String(baseH));
+          const HAS_OPEN = (typeof OPEN_PROD !== 'undefined' && OPEN_PROD);
+          const DRAWER = (typeof DRAWER_H !== 'undefined') ? DRAWER_H : 0;
+          svgEl.setAttribute('height', HAS_OPEN ? String(baseH + DRAWER) : String(baseH));
         }
-        const openIndex = OPEN_PROD ? labels.indexOf(OPEN_PROD) : -1;
+        const HAS_OPEN = (typeof OPEN_PROD !== 'undefined' && OPEN_PROD);
+        const DRAWER = (typeof DRAWER_H !== 'undefined') ? DRAWER_H : 0;
+        const openIndex = HAS_OPEN ? labels.indexOf(OPEN_PROD) : -1;
         function colorOfType(t){ const palette=['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab']; return palette[types.indexOf(t)%palette.length]; }
         function colorOfLang(l){ const palette=['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab']; return palette[langs.indexOf(l)%palette.length]; }
         // y labels
         const yHtml = labels.map(function(label, idx){
-          const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
+          const offset = (openIndex>=0 && idx>openIndex) ? DRAWER : 0;
           const yy = marginTop + idx*(barHeight+barGap) + barHeight/2 + 3 + offset;
           const name = (DATA.codeNameMap&&DATA.codeNameMap[label])?DATA.codeNameMap[label]:label;
           return '<text class="prod-label" data-prod="'+label+'" x="'+(marginLeft-8)+'" y="'+yy+'" text-anchor="end" font-size="10" fill="#333" style="cursor:pointer;">'+name+'</text>';
@@ -1597,7 +1623,7 @@ function generateHtml(data, opts = {}) {
         // bars
         function buildBars(mode){
           return labels.map(function(label, idx){
-            const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
+            const offset = (openIndex>=0 && idx>openIndex) ? DRAWER : 0;
             const baseY = marginTop + idx*(barHeight+barGap) + offset;
             let parts = []; let cursor = marginLeft;
             if (mode==='type'){
@@ -1626,24 +1652,73 @@ function generateHtml(data, opts = {}) {
         }
         const bt = document.getElementById('bars-type'); if (bt) bt.innerHTML = buildBars('type');
         const bl = document.getElementById('bars-lang'); if (bl) bl.innerHTML = buildBars('lang');
-        // orders overlay
+        // orders overlay (single render based on STATE.dim) — use DOM y-labels order if present
         const orders = DATA.orderCounts || {};
         const bo = document.getElementById('bars-orders'); if (bo){
-          bo.innerHTML = labels.map(function(label, idx){
-            const offset = (openIndex>=0 && idx>openIndex) ? DRAWER_H : 0;
-            const yv = marginTop + idx*(barHeight+barGap) + offset;
-            const ord = Number(orders[label]||0); if (!ord) return '';
-            const w = Math.max(1,xScale(ord)); const hb = Math.max(6, Math.round(barHeight*0.35)); const yo = yv + (barHeight-hb);
-            return '<rect class="orders-bar" data-prod="'+label+'" x="'+marginLeft+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="#9ca3af" fill-opacity="0.6" />';
-          }).join('');
+          const domLabels = Array.from(document.querySelectorAll('#ylabels-products .prod-label'))
+            .map(function(el){ return el && el.getAttribute ? el.getAttribute('data-prod') : null; })
+            .filter(function(v){ return v!=null && v!==''; });
+
+          function getOrderCount(k){
+            const key = String(k);
+            const src = DATA.orderCounts;
+            if (src && typeof src.get === 'function') {
+              const v = src.get(key) ?? src.get(Number(key));
+              return Number(v || 0);
+            }
+            const v = (src && (src[key] ?? src[Number(key)]));
+            return Number(v || 0);
+          }
+
+          const targetLabels = (domLabels && domLabels.length) ? domLabels : labels;
+          if (DEBUG_ORDERS) {
+            console.debug('[orders] STATE.dim=', STATE && STATE.dim, 'labels(dom/raw)=', targetLabels.length, '/', labels.length);
+            console.debug('[orders] sample counts=', targetLabels.slice(0,5).map(c=>[c, getOrderCount(c)]));
+          }
+          const hb = Math.max(6, Math.round(barHeight*0.35));
+          const html = targetLabels.map(function(label, idx){
+              const offset = (openIndex>=0 && idx>openIndex) ? DRAWER : 0;
+              const yv = marginTop + idx*(barHeight+barGap) + offset;
+              const ord = getOrderCount(label); if (!ord) return '';
+              const yo = yv + (barHeight - hb);
+              if (STATE.dim === 'lang'){
+                const byType = DATA.tri[label] || {};
+                const langTotals = {}; let inqTotal = 0;
+                for (const t in byType){ const m = byType[t]||{}; for (const l in m){ const c=Number(m[l]||0); langTotals[l]=(langTotals[l]||0)+c; inqTotal+=c; } }
+                if (inqTotal <= 0) {
+                  const w = Math.max(1,xScale(ord));
+                  return '<rect class="orders-bar" data-prod="'+label+'" x="'+marginLeft+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="#9ca3af" fill-opacity="0.6" />';
+                }
+                let cursor = marginLeft; const parts=[];
+                for (let li=0; li<langs.length; li++){
+                  const l = langs[li]; const cnt = Number(langTotals[l]||0); if (cnt<=0) continue;
+                  const share = cnt / inqTotal; const w = Math.max(1, xScale(ord * share));
+                  parts.push('<rect class="orders-bar" data-prod="'+label+'" x="'+cursor+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="'+colorOfLang(l)+'" fill-opacity="0.45" />');
+                  cursor += w;
+                }
+                return parts.join('');
+              } else {
+                const w = Math.max(1,xScale(ord));
+                return '<rect class="orders-bar" data-prod="'+label+'" x="'+marginLeft+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="#9ca3af" fill-opacity="0.6" />';
+              }
+            }).join('');
+          bo.innerHTML = html;
+          const show = tabAnalProduct.classList.contains('active') && toggleOrders && toggleOrders.checked;
+          bo.style.display = show ? '' : 'none';
+          if (DEBUG_ORDERS) {
+            console.debug('[orders] rects=', bo.querySelectorAll('rect').length, 'display=', getComputedStyle(bo).display);
+          }
         }
         attachProductLabelClick(); attachHover();
       }
       const sortProdSel = document.getElementById('sort-prod');
+      // Expose manual rebuild for console debugging
+      window.rebuildOrders = function(){ try { const s = document.getElementById('sort-prod'); applyProductSort(s?s.value:'desc'); } catch(e) { console.warn('[orders] rebuild error', e); } };
       if (sortProdSel) sortProdSel.addEventListener('change', ()=>applyProductSort(sortProdSel.value||'desc'));
       if (toggleOrders) toggleOrders.addEventListener('change', function(){
         if (!barsOrders) return;
         const isProductTab = tabAnalProduct.classList.contains('active');
+        try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
         barsOrders.style.display = (isProductTab && toggleOrders.checked) ? '' : 'none';
       });
       document.addEventListener('click', function(e){

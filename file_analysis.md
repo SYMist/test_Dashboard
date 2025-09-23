@@ -198,6 +198,49 @@
   - `product_order_dummy_database.csv`의 ‘주문 일시’를 `YYYY-MM-DD`로 절삭하여 상품별·일자별 집계(`perProductOrderDateCounts`)
   - 총 주문량(`orderCounts`)과 함께 템플릿 데이터에 포함
 - 위치/표시 안정화
+
+---
+
+## 추가 변경 사항 (2025-09-23)
+
+### 인사이트 토글 전반 연동/안정화
+- 상단에 “인사이트 보기” 토글 UI 추가(상태는 localStorage 보존)
+- 토글 ON 시 ‘인사이트=TRUE’ 행만으로 필터링된 집계 사용
+  - 상품 스택 바, 상단 트렌드, 예약코드 차트, ‘주문 대비 문의 비율’, ‘언어별 문의 유형 분포’ 모두 연동
+- 일부 뷰는 FULL/INSIGHT 두 벌을 미리 렌더해 CSS로 전환(full-only/insight-only)하여 안정성 확보
+- ‘언어별 문의 유형 분포’에서 토글 OFF시 카드가 2개씩 보이던 문제를 CSS 우선 규칙 보강으로 해결
+
+### 정렬 옵션 확장(비율 우선 정렬)
+- ‘상품 별 주문 대비 문의 비율’ 카드 정렬에 백분위 높은/낮은 순 추가
+  - pct_desc/pct_asc: 주문/문의 절대값과 무관하게 백분율 우선
+- ‘언어별 문의 유형 분포’에도 동일 옵션 추가(언어 내 백분율 기준)
+
+### 예약코드 차트 토글 연동
+- FULL/INSIGHT 두 세트를 동일 SVG에 동시 렌더 후 CSS 전환(토글/정렬 동작과 일관)
+
+### ‘주문량 보기’(주문 오버레이) 단순화/신뢰성 개선
+- 상태 변수 1개(`STATE.dim = 'type'|'lang'`)로 차원 모드만 추적
+- applyProductSort()에서 오버레이를 단 한 번 생성해 `#bars-orders`에 주입
+  - 언어 모드: 문의 언어 분포 비율로 주문량 분해(언어별 스택)
+  - 유형 모드: 회색 단일 바
+- 표시 순서·미스매치 해소
+  - Y축 라벨을 DOM(`'#ylabels-products .prod-label'`)에서 직접 읽어 실제 화면 순서로 주입
+  - 주문 수 조회 안전화(Map/Object, 문자열·숫자 키 모두 지원)
+    - `getOrderCount(key)`로 `DATA.orderCounts.get(key)`/`obj[key]`/`obj[Number(key)]`를 순차 조회
+- 초기 템플릿에서 `#bars-orders`를 비워두고(사전 하드코딩 제거), 토글/탭/정렬 이벤트마다 재생성
+- 전역 미정의로 인한 예외(OPEN_PROD/DRAWER_H) 가드 처리 → 예외로 렌더 중단되는 문제 제거
+- 디버깅 헬퍼 추가: `window.rebuildOrders()`로 콘솔에서 수동 재생성 가능
+
+### 기타
+- lt-cards/ratios-grid의 full-only/insight-only 전환 CSS를 구체 선택자로 보강(display 충돌 방지)
+- 템플릿 초기 `#bars-orders`는 비어 있는 `<g>`로 출력하여 초기 회색 바 노출 제거
+
+### 확인 포인트
+- 언어 탭 + ‘주문량 보기’ ON → 주문 오버레이가 언어 색상 스택으로 보임
+- 문의 유형 탭 + ‘주문량 보기’ ON → 회색 단일 바
+- 콘솔 검사(필요 시):
+  - `document.querySelectorAll('#bars-orders rect').length > 0`
+  - `window.rebuildOrders()`로 수동 재생성 가능
   - 라벨 기준 위쪽 우선 배치, 공간 부족 시 아래 배치, 좌/우 뷰포트 클램프
 
 ---
