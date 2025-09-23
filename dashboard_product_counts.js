@@ -639,6 +639,19 @@ function generateHtml(data, opts = {}) {
     const name = (codeNameMap && codeNameMap[prod]) ? codeNameMap[prod] : prod;
     return `<div class="ratio-item"><span class="ratio-code">${name}</span><span class="ratio-val">${val}</span><span class="ratio-detail">(${inq}/${ord})</span></div>`;
   }).join('');
+  // Insight-only ratios (use insight.totals with same orderCounts)
+  const insightTotals = insight.totals || {};
+  const ratiosItemsI = (Array.isArray(insight.productOrder) ? insight.productOrder : []).map((prod) => {
+    const inq = Number(insightTotals[prod] || 0);
+    const ord = orderCounts.get(prod) || 0;
+    const pct = ord > 0 ? (inq / ord) * 100 : null;
+    return { prod, inq, ord, pct };
+  });
+  const ratiosHtmlI = ratiosItemsI.map(({ prod, inq, ord, pct }) => {
+    const val = pct == null ? '-' : (Math.round(pct * 100) / 100).toFixed(2) + '%';
+    const name = (codeNameMap && codeNameMap[prod]) ? codeNameMap[prod] : prod;
+    return `<div class="ratio-item"><span class="ratio-code">${name}</span><span class="ratio-val">${val}</span><span class="ratio-detail">(${inq}/${ord})</span></div>`;
+  }).join('');
 
   const legendHtmlType = types.map((t) => {
     const color = colorOfType(t);
@@ -670,6 +683,21 @@ function generateHtml(data, opts = {}) {
     return `<div class="lt-card"><div class="lt-card-title">${l}</div><div class="lt-list">
       ${list || '<div class="lt-item">데이터 없음</div>'}
     </div></div>`;
+  }).join('');
+  // Insight variant for 언어별 문의 유형 분포
+  const langTypeObjI = insight.langTypeObj || {};
+  const langTypeCardsI = langs.map((l) => {
+    const tMap = langTypeObjI[l] || {};
+    const totalL = Object.values(tMap).reduce((a,b)=>a+b, 0);
+    const ranked = types
+      .map(t => ({ t, c: tMap[t] || 0 }))
+      .filter(x => x.c > 0)
+      .sort((a,b) => b.c - a.c);
+    const list = ranked.map((x, i) => {
+      const pct = totalL ? Math.round((x.c / totalL) * 100) : 0;
+      return `<div class=\"lt-item\">${i+1}위 - ${x.t} (${pct}%)</div>`;
+    }).join('');
+    return `<div class=\"lt-card\"><div class=\"lt-card-title\">${l}</div><div class=\"lt-list\">${list || '<div class=\\"lt-item\\">데이터 없음</div>'}</div></div>`;
   }).join('');
 
   const html = 
@@ -723,6 +751,15 @@ function generateHtml(data, opts = {}) {
     .lang-type-section { margin-top: 14px; }
     .lang-type-title { font-size:12px; color:#374151; margin-bottom:6px; }
     .lt-cards { display:flex; gap:12px; overflow-x:auto; padding-bottom: 4px; }
+    /* Ensure toggle visibility overrides container display for flex/grid wrappers */
+    .lt-cards.insight-only { display:none; }
+    .lt-cards.full-only { display:flex; }
+    .ratios-grid.insight-only { display:none; }
+    .ratios-grid.full-only { display:grid; }
+    body.insight-on .lt-cards.full-only { display:none; }
+    body.insight-on .lt-cards.insight-only { display:flex; }
+    body.insight-on .ratios-grid.full-only { display:none; }
+    body.insight-on .ratios-grid.insight-only { display:grid; }
     .lt-card { min-width: 200px; border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff; }
     .lt-card-title { font-size:12px; font-weight:600; color:#374151; margin-bottom:6px; }
     .lt-list { display:flex; flex-direction:column; gap:4px; }
@@ -916,13 +953,15 @@ function generateHtml(data, opts = {}) {
         </label>
       </div>
       <div id="resv-ratios" class="ratios">
-        <div class="ratios-grid">${ratiosHtml}</div>
+        <div class="ratios-grid full-only">${ratiosHtml}</div>
+        <div class="ratios-grid insight-only">${ratiosHtmlI}</div>
       </div>
     </div>
     <div id="resv-langtype-card" class="card hidden" style="margin-top:12px;">
       <div class="muted" style="margin-bottom:6px;">언어별 문의 유형 분포</div>
       <div class="lang-type-section">
-        <div class="lt-cards">${langTypeCards}</div>
+        <div class="lt-cards full-only">${langTypeCards}</div>
+        <div class="lt-cards insight-only">${langTypeCardsI}</div>
       </div>
     </div>
     <div class="card hidden" id="resv-code-chart-card" style="margin-top:12px;">
@@ -1186,77 +1225,76 @@ function generateHtml(data, opts = {}) {
 
       function renderResvCodeChart(mode) {
         const container = document.getElementById('chart-resv-code');
-        // entries: [code, count]
-        const entries = Object.entries(DATA.resvCodeCounts || {});
-        entries.sort(function(a,b){
-          var ca = Number(a[1]) || 0;
-          var cb = Number(b[1]) || 0;
-          if (mode === 'asc') { if (ca !== cb) return ca - cb; }
-          else { if (cb !== ca) return cb - ca; }
-          return String(a[0]).localeCompare(String(b[0]));
-        });
-        const resvCodeLabels = entries.map(function(e){ return e[0]; });
-        const resvCodeValues = entries.map(function(e){ return e[1]; });
-        const maxCount = resvCodeValues.length > 0 ? Math.max.apply(null, resvCodeValues) : 0;
-        const n = resvCodeLabels.length;
-        const barHeight = 22;
-        const barGap = 10;
-        const marginLeft = 100;
-        const marginRight = 40;
-        const marginTop = 30;
-        const marginBottom = 40;
+        const build = function(counts){
+          const entries = Object.entries(counts || {});
+          entries.sort(function(a,b){
+            var ca = Number(a[1]) || 0;
+            var cb = Number(b[1]) || 0;
+            if (mode === 'asc') { if (ca !== cb) return ca - cb; }
+            else { if (cb !== ca) return cb - ca; }
+            return String(a[0]).localeCompare(String(b[0]));
+          });
+          const resvCodeLabels = entries.map(function(e){ return e[0]; });
+          const resvCodeValues = entries.map(function(e){ return e[1]; });
+          const maxCount = resvCodeValues.length > 0 ? Math.max.apply(null, resvCodeValues) : 0;
+          const n = resvCodeLabels.length;
+          const barHeight = 22;
+          const barGap = 10;
+          const marginLeft = 100;
+          const marginRight = 40;
+          const marginTop = 30;
+          const marginBottom = 40;
+          const width = 1000;
+          const chartHeight = Math.max(0, n * barHeight + Math.max(0, n - 1) * barGap);
+          const height = Math.max(200, marginTop + chartHeight + marginBottom);
+          const chartWidth = width - marginLeft - marginRight;
+          const xScale = function(v){ return (maxCount === 0 ? 0 : Math.round((v / maxCount) * chartWidth)); };
+          const ticks = [];
+          const tickCount = 5;
+          for (let i = 0; i <= tickCount; i++) {
+            const val = Math.round((maxCount * i) / tickCount);
+            const x = marginLeft + xScale(val);
+            ticks.push({ val: val, x: x });
+          }
+          const xAxisSvg = ticks.map(function(t){
+            return '<line x1="' + t.x + '" y1="' + marginTop + '" x2="' + t.x + '" y2="' + (marginTop + chartHeight) + '" stroke="#eee" />'
+                 + '<text x="' + t.x + '" y="' + (marginTop + chartHeight + 14) + '" text-anchor="middle" font-size="10" fill="#666">' + t.val + '</text>';
+          }).join('');
+          const yLabelsSvg = resvCodeLabels.map(function(label, idx){
+            const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
+            return '<text x="' + (marginLeft - 8) + '" y="' + y + '" text-anchor="end" font-size="10" fill="#333">' + label + '</text>';
+          }).join('');
+          const barsSvg = resvCodeLabels.map(function(label, idx){
+            const y = marginTop + idx * (barHeight + barGap);
+            const c = (counts && counts[label]) || 0;
+            const w = Math.max(1, xScale(c));
+            const color = '#4e79a7';
+            const textX = marginLeft + w / 2;
+            const textY = y + barHeight / 2 + 3;
+            const xEnd = marginLeft + w;
+            return '<g>' +
+                   '<rect x="' + marginLeft + '" y="' + y + '" width="' + w + '" height="' + barHeight + '" fill="' + color + '" />' +
+                   '<text x="' + textX + '" y="' + textY + '" text-anchor="middle" font-size="10" fill="#fff">' + c + '</text>' +
+                   '<text x="' + (xEnd + 6) + '" y="' + textY + '" text-anchor="start" font-size="10" fill="#333">' + c + '</text>' +
+                   '</g>';
+          }).join('');
+          const header = '' +
+            '<text x="16" y="' + (marginTop + chartHeight / 2) + '" transform="rotate(-90 16,' + (marginTop + chartHeight / 2) + ')" text-anchor="middle" font-size="12" fill="#666">예약코드</text>' +
+            '<text x="' + (marginLeft + chartWidth / 2) + '" y="' + (marginTop + chartHeight + 28) + '" text-anchor="middle" font-size="12" fill="#666">건수</text>' +
+            '<line x1="' + marginLeft + '" y1="' + marginTop + '" x2="' + marginLeft + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />' +
+            '<line x1="' + marginLeft + '" y1="' + (marginTop + chartHeight) + '" x2="' + (marginLeft + chartWidth) + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />';
+          return { height, svg: header + xAxisSvg + '<g>' + barsSvg + '</g>' + '<g>' + yLabelsSvg + '</g>' };
+        };
+        const full = build((typeof DATA_FULL !== 'undefined' && DATA_FULL && DATA_FULL.resvCodeCounts) ? DATA_FULL.resvCodeCounts : {});
+        const ins = build((typeof DATA_INSIGHT !== 'undefined' && DATA_INSIGHT && DATA_INSIGHT.resvCodeCounts) ? DATA_INSIGHT.resvCodeCounts : {});
         const width = 1000;
-        const chartHeight = Math.max(0, n * barHeight + Math.max(0, n - 1) * barGap);
-        const height = Math.max(200, marginTop + chartHeight + marginBottom);
-        const chartWidth = width - marginLeft - marginRight;
-
+        const height = Math.max(full.height, ins.height);
         container.setAttribute('height', String(height));
         container.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-
-        const xScale = function(v){ return (maxCount === 0 ? 0 : Math.round((v / maxCount) * chartWidth)); };
-
-        const ticks = [];
-        const tickCount = 5;
-        for (let i = 0; i <= tickCount; i++) {
-          const val = Math.round((maxCount * i) / tickCount);
-          const x = marginLeft + xScale(val);
-          ticks.push({ val: val, x: x });
-        }
-
-        const xAxisSvg = ticks.map(function(t){
-          return '<line x1="' + t.x + '" y1="' + marginTop + '" x2="' + t.x + '" y2="' + (marginTop + chartHeight) + '" stroke="#eee" />'
-               + '<text x="' + t.x + '" y="' + (marginTop + chartHeight + 14) + '" text-anchor="middle" font-size="10" fill="#666">' + t.val + '</text>';
-        }).join('');
-
-        const yLabelsSvg = resvCodeLabels.map(function(label, idx){
-          const y = marginTop + idx * (barHeight + barGap) + barHeight / 2 + 3;
-          return '<text x="' + (marginLeft - 8) + '" y="' + y + '" text-anchor="end" font-size="10" fill="#333">' + label + '</text>';
-        }).join('');
-
-        const barsSvg = resvCodeLabels.map(function(label, idx){
-          const y = marginTop + idx * (barHeight + barGap);
-          const c = DATA.resvCodeCounts[label] || 0;
-          const w = Math.max(1, xScale(c));
-          const color = '#4e79a7';
-          const textX = marginLeft + w / 2;
-          const textY = y + barHeight / 2 + 3;
-          const xEnd = marginLeft + w;
-          return '<g>' +
-                 '<rect x="' + marginLeft + '" y="' + y + '" width="' + w + '" height="' + barHeight + '" fill="' + color + '" />' +
-                 '<text x="' + textX + '" y="' + textY + '" text-anchor="middle" font-size="10" fill="#fff">' + c + '</text>' +
-                 '<text x="' + (xEnd + 6) + '" y="' + textY + '" text-anchor="start" font-size="10" fill="#333">' + c + '</text>' +
-                 '</g>';
-        }).join('');
-
         container.innerHTML = '' +
           '<rect x="0" y="0" width="' + width + '" height="' + height + '" fill="transparent" />' +
-          '<text x="16" y="' + (marginTop + chartHeight / 2) + '" transform="rotate(-90 16,' + (marginTop + chartHeight / 2) + ')" text-anchor="middle" font-size="12" fill="#666">예약코드</text>' +
-          '<text x="' + (marginLeft + chartWidth / 2) + '" y="' + (marginTop + chartHeight + 28) + '" text-anchor="middle" font-size="12" fill="#666">건수</text>' +
-          '<line x1="' + marginLeft + '" y1="' + marginTop + '" x2="' + marginLeft + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />' +
-          '<line x1="' + marginLeft + '" y1="' + (marginTop + chartHeight) + '" x2="' + (marginLeft + chartWidth) + '" y2="' + (marginTop + chartHeight) + '" stroke="#9ca3af" stroke-width="1" />' +
-          xAxisSvg +
-          '<g>' + barsSvg + '</g>' +
-          '<g>' + yLabelsSvg + '</g>';
+          '<g class="full-only">' + full.svg + '</g>' +
+          '<g class="insight-only">' + ins.svg + '</g>';
       }
 
       function showAnalProduct(){
@@ -1360,6 +1398,7 @@ function generateHtml(data, opts = {}) {
       if (sortResvCodeSel) sortResvCodeSel.addEventListener('change', ()=>renderResvCodeChart(sortResvCodeSel.value));
       const sortRatiosSel = document.getElementById('sort-ratios');
       function rebuildRatios(sort){
+        const on = document.body.classList.contains('insight-on');
         const tri = DATA.tri || {};
         const order = DATA.orderCounts || {};
         const items = Object.keys(tri).map(prod=>{
@@ -1369,7 +1408,7 @@ function generateHtml(data, opts = {}) {
           return { prod, inq, ord, pct };
         });
         items.sort((a,b)=> sort==='asc' ? (a.inq-b.inq) : (b.inq-a.inq));
-        const grid = document.querySelector('.ratios-grid');
+        const grid = document.querySelector(on ? '#resv-ratios .ratios-grid.insight-only' : '#resv-ratios .ratios-grid.full-only');
         if (!grid) return;
         grid.innerHTML = items.map(({prod,inq,ord,pct})=>{
           const name = (DATA.codeNameMap&&DATA.codeNameMap[prod])?DATA.codeNameMap[prod]:prod;
