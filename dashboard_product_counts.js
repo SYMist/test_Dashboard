@@ -1913,6 +1913,7 @@ function generateHtml(data, opts = {}) {
           }
         }
         attachProductLabelClick(); attachHover();
+        try { renderActiveFilters(); } catch(e){}
       }
       const sortProdSel = document.getElementById('sort-prod');
       // Language filter (only affects '문의 유형' internal tab)
