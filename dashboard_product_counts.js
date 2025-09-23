@@ -62,6 +62,8 @@ function readData(csvPath) {
   let nameIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '상품명');
   let createdIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === 'createdAt');
   let insightIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '인사이트');
+  let bigCatIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '대카테고리');
+  let subCatIdx = header.findIndex(h => h.replace(/\u00A0/g, ' ').trim() === '세부 카테고리');
 
   const perProductType = new Map();
   const perProductLang = new Map();
@@ -86,6 +88,7 @@ function readData(csvPath) {
   const dateCounts = new Map();
   const perProductDateCounts = new Map();
   const rawRows = [];
+  const bigDetailCounts = new Map(); // big -> (detail -> count)
   let totalInquiriesCount = 0;
   let nullResvCodeCount = 0;
 
@@ -102,6 +105,8 @@ function readData(csvPath) {
     const createdRaw = (createdIdx !== -1 && row.length > createdIdx) ? String((row[createdIdx] || '').trim()) : '';
     const insightRaw = (insightIdx !== -1 && row.length > insightIdx) ? String((row[insightIdx] || '').trim()) : '';
     if (!code || !typ || !lang) continue;
+    const big = (bigCatIdx !== -1 && row.length > bigCatIdx) ? String((row[bigCatIdx] || '').trim()) : '';
+    const sub = (subCatIdx !== -1 && row.length > subCatIdx) ? String((row[subCatIdx] || '').trim()) : '';
     if (name && !codeToName.has(code)) codeToName.set(code, name);
     if (createdRaw) {
       const d = createdRaw.slice(0, 10);
@@ -178,7 +183,13 @@ function readData(csvPath) {
       if (!statusLangType.get(status).has(lang)) statusLangType.get(status).set(lang, new Map());
       statusLangType.get(status).get(lang).set(typ, (statusLangType.get(status).get(lang).get(typ) || 0) + 1);
     }
-    rawRows.push({ id: reqid, resvCode: resvCodeHere, productCode: code, productName: name, lang, type: typ, summary: content, createdAt: createdRaw, insight: /^true$/i.test(insightRaw) || insightRaw === '1' || insightRaw === 'TRUE' });
+    // big/detail aggregation
+    if (big) {
+      if (!bigDetailCounts.has(big)) bigDetailCounts.set(big, new Map());
+      const m = bigDetailCounts.get(big);
+      m.set(sub || '기타', (m.get(sub || '기타') || 0) + 1);
+    }
+    rawRows.push({ id: reqid, resvCode: resvCodeHere, productCode: code, productName: name, lang, type: typ, summary: content, createdAt: createdRaw, insight: /^true$/i.test(insightRaw) || insightRaw === '1' || insightRaw === 'TRUE', bigCat: big, subCat: sub });
   }
 
   const ordersPath = 'product_order_dummy_database.csv';
@@ -310,11 +321,14 @@ function readData(csvPath) {
     const statusLangTypeM = new Map();
     const resvTotalsM = new Map();
     const resvSetM = new Set();
+    const bigDetailM = new Map();
     for (const r of rows) {
       const code = String(r.productCode||'').trim();
       const typ = String(r.type||'').trim();
       const lang = String(r.lang||'').trim();
       if (!code || !typ || !lang) continue;
+      const big = String(r.bigCat||'').trim();
+      const sub = String(r.subCat||'').trim();
       const d = String(r.createdAt||'').slice(0,10);
       if (d) dateCountsM.set(d, (dateCountsM.get(d)||0)+1);
       const rc = String(r.resvCode||'').trim(); if (rc) resvCodeCountsM.set(rc, (resvCodeCountsM.get(rc)||0)+1);
@@ -370,6 +384,7 @@ function readData(csvPath) {
     const statusTypeLangObjM = {}; for (const [s,tMap] of statusTypeLangM.entries()){ statusTypeLangObjM[s]={}; for (const [t,lMap] of tMap.entries()){ statusTypeLangObjM[s][t]={}; for (const [l,c] of lMap.entries()) statusTypeLangObjM[s][t][l]=c; } }
     const statusLangTypeObjM = {}; for (const [s,lMap] of statusLangTypeM.entries()){ statusLangTypeObjM[s]={}; for (const [l,tMap] of lMap.entries()){ statusLangTypeObjM[s][l]={}; for (const [t,c] of tMap.entries()) statusLangTypeObjM[s][l][t]=c; } }
     const resvStatusesM = Array.from(resvSetM.values()).sort((a,b)=>{ const ta=resvTotalsM.get(a)||0; const tb=resvTotalsM.get(b)||0; if (tb!==ta) return tb-ta; return (a||'NULL').localeCompare(b||'NULL'); });
+    const bigDetailObjM = {}; for (const [bk, m] of bigDetailM.entries()){ bigDetailObjM[bk] = Object.fromEntries(m); }
     return {
       triObj: triObjM,
       textObj: textObjM,
@@ -382,16 +397,18 @@ function readData(csvPath) {
       statusTypeLang: statusTypeLangObjM,
       statusLangType: statusLangTypeObjM,
       resvStatuses: resvStatusesM,
+      bigDetailObj: bigDetailObjM,
     };
   }
   const insightRows = rawRows.filter(r => r.insight === true);
   const insight = buildFromRows(insightRows);
   const fullForSwitch = buildFromRows(rawRows);
-  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj, perProductOrderDateCounts: perProductOrderDateCountsObj, rawRows, insight, fullForSwitch };
+  const bigDetailObj = {}; for (const [bk, m] of bigDetailCounts.entries()){ bigDetailObj[bk] = Object.fromEntries(m); }
+  return { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang: statusTypeLangObj, statusLangType: statusLangTypeObj, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap: Object.fromEntries(codeToName), dateCounts: Object.fromEntries(dateCounts), perProductDateCounts: perProductDateCountsObj, perProductOrderDateCounts: perProductOrderDateCountsObj, rawRows, insight, fullForSwitch, bigDetailObj };
 }
 
 function generateHtml(data, opts = {}) {
-  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts, perProductOrderDateCounts, rawRows, insight, fullForSwitch } = data;
+  const { perProductType, perProductLang, perProductResv, totals, orderCounts, productOrder, types, langs, resvStatuses, statusTypeCounts, statusLangCounts, statusTypeLang, statusLangType, reservationNullPercent, langTypeObj, triObj, textObj, reqObj, resvCodeCounts, codeNameMap, dateCounts, perProductDateCounts, perProductOrderDateCounts, rawRows, insight, fullForSwitch, bigDetailObj } = data;
   const labels = productOrder;
   const values = labels.map(k => totals.get(k) || 0);
   const orderVals = labels.map(k => (orderCounts.get(k) || 0));
@@ -874,6 +891,15 @@ function generateHtml(data, opts = {}) {
       </div>
     <h1 id="page-title">상품 기반 분석</h1>
     <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
+    <div id="bigcat-pies" class="card" style="margin:10px 0;">
+      <div class="line-chart-header" style="margin-bottom:8px; display:flex; align-items:center;">
+        <div class="line-chart-title">대카테고리별 세부 카테고리 분포</div>
+      </div>
+      <div id="bigcat-pies-wrap" style="display:flex; gap:12px; justify-content:space-between; align-items:flex-start;">
+        <div class="full-only" style="display:flex; gap:12px;"></div>
+        <div class="insight-only" style="display:none; gap:12px;"></div>
+      </div>
+    </div>
     <div class="tabs" role="tablist" style="margin-bottom:6px; gap:8px; display:none;">
       <button id="tab-anal-product" class="tab active" role="tab" aria-selected="true">상품 기반 분석</button>
     </div>
@@ -1006,8 +1032,8 @@ function generateHtml(data, opts = {}) {
   <div id="product-tooltip" class="product-tooltip hidden"></div>
   <script>
     (function(){
-      const DATA_FULL = ${JSON.stringify({ types, langs, productOrder: productOrder, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts, rawRows })};
-      const DATA_INSIGHT = ${JSON.stringify({ types, langs, productOrder: (insight.productOrder||[]), tri: insight.triObj, texts: insight.textObj, reqs: insight.reqObj, statusTypeLang: insight.statusTypeLang, statusLangType: insight.statusLangType, resvCodeCounts: (insight.resvCodeCounts||{}), codeNameMap: (codeNameMap || {}), dateCounts: (insight.dateCounts||{}), perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts, rawRows })};
+      const DATA_FULL = ${JSON.stringify({ types, langs, productOrder: productOrder, tri: triObj, texts: textObj, reqs: reqObj, statusTypeLang, statusLangType, resvCodeCounts: Object.fromEntries(resvCodeCounts), codeNameMap: (codeNameMap || {}), dateCounts, perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts, rawRows, bigDetailObj })};
+      const DATA_INSIGHT = ${JSON.stringify({ types, langs, productOrder: (insight.productOrder||[]), tri: insight.triObj, texts: insight.textObj, reqs: insight.reqObj, statusTypeLang: insight.statusTypeLang, statusLangType: insight.statusLangType, resvCodeCounts: (insight.resvCodeCounts||{}), codeNameMap: (codeNameMap || {}), dateCounts: (insight.dateCounts||{}), perProductDateCounts, orderCounts: Object.fromEntries(orderCounts), perProductOrderDateCounts, rawRows, bigDetailObj: (insight.bigDetailObj||{}) })};
       let DATA = (localStorage.getItem('insightOn')==='1') ? DATA_INSIGHT : DATA_FULL;
       (function setupInsightToggle(){
         const btn = document.getElementById('toggle-insight'); if (!btn) return;
@@ -1022,6 +1048,7 @@ function generateHtml(data, opts = {}) {
             if (typeof renderResvCodeChart==='function') { const s = document.getElementById('sort-resv-code'); renderResvCodeChart(s?s.value:'desc'); }
             if (typeof rebuildRatios==='function') { const s2 = document.getElementById('sort-ratios'); rebuildRatios(s2?s2.value:'desc'); }
             if (typeof rebuildLangType==='function') { const s3 = document.getElementById('sort-langtype'); rebuildLangType(s3?s3.value:'desc'); }
+            if (typeof renderBigcatPies==='function') { renderBigcatPies(); }
             const desc = document.getElementById('chart-desc');
             if (desc) {
               let total = 0; const tri = DATA.tri || {};
@@ -1070,6 +1097,28 @@ function generateHtml(data, opts = {}) {
       const detail = document.getElementById('bar-detail');
       const svg = document.getElementById('chart');
       const toggleOrders = document.getElementById('toggle-orders');
+
+      function renderBigcatPies(){
+        const wrap = document.getElementById('bigcat-pies-wrap'); if (!wrap) return;
+        const fullBox = wrap.querySelector('.full-only');
+        const insBox = wrap.querySelector('.insight-only');
+        function build(bd){
+          const BIGS = ['여행','쇼핑','어학당'];
+          const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949','#af7aa1','#ff9da7','#9c755f','#bab0ab'];
+          function makePie(big){
+            const map = (bd && bd[big]) || {};
+            const keys = Object.keys(map);
+            if (!keys.length) return '';
+            const colors = (label)=>{ const idx = keys.indexOf(label); return palette[(idx>=0?idx:0)%palette.length]; };
+            const entries = Object.entries(map).sort((a,b)=> b[1]-a[1]);
+            return '<div>' + drawPie(entries, colors, big) + '</div>';
+          }
+          return BIGS.map(makePie).join('');
+        }
+        if (fullBox && typeof DATA_FULL !== 'undefined') fullBox.innerHTML = build(DATA_FULL.bigDetailObj || {});
+        if (insBox && typeof DATA_INSIGHT !== 'undefined') insBox.innerHTML = build(DATA_INSIGHT.bigDetailObj || {});
+        // visibility follows body.insight-on toggles by CSS
+      }
 
       function renderDateActivity(mode) {
         const container = document.getElementById('chart-date-activity');
@@ -1404,6 +1453,7 @@ function generateHtml(data, opts = {}) {
             renderResvCodeChart(sortSel ? sortSel.value : 'desc');
           }
         } catch (e) {}
+        try { if (typeof renderBigcatPies==='function') renderBigcatPies(); } catch(e){}
       }
       function showAnalResv(){
         tabAnalResv.classList.add('active');
