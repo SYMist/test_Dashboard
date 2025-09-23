@@ -1115,7 +1115,7 @@ function generateHtml(data, opts = {}) {
         el.innerHTML = items.map(function(it){
           return '<span class="badge" data-key="'+it.key+'">'+it.label+': '+esc(it.value)+' <button class="badge-close" type="button" aria-label="필터 해제" data-clear="'+it.key+'">×</button></span>';
         }).join('');
-        el.style.display='';
+        el.style.display='flex';
       }
 
       function renderBigcatPies(){
