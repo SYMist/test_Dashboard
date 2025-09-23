@@ -451,7 +451,11 @@
             if (!keys.length) return '';
             const colors = (label)=>{ const idx = keys.indexOf(label); return palette[(idx>=0?idx:0)%palette.length]; };
             const entries = Object.entries(map).sort((a,b)=> b[1]-a[1]);
-            return '<div>' + drawPie(entries, colors, big) + '</div>';
+            function attr(label){
+              const esc = (s)=>String(s).replace(/"/g,'&quot;');
+              return ' data-role="bigpie" data-big="'+esc(big)+'" data-sub="'+esc(label)+'" style="cursor:pointer"';
+            }
+            return '<div>' + drawPie(entries, colors, big, attr) + '</div>';
           }
           return BIGS.map(makePie).join('');
         }
@@ -1010,25 +1014,39 @@
         const totals = {};
         const usingLangFilter = (STATE.dim === 'type' && STATE.langFilter);
         const usingTypeFilter = (STATE.dim === 'lang' && STATE.typeFilter);
-        for (const prod in tri){
-          let s=0;
-          if (usingTypeFilter) {
-            const m = (tri[prod] && tri[prod][STATE.typeFilter]) || {};
-            for (const l in m) { s += Number(m[l]||0); }
-          } else {
-            for (const t in tri[prod]){
-              const m = tri[prod][t]||{};
-              for (const l in m){
-                if (usingLangFilter && l !== STATE.langFilter) continue;
-                s+=Number(m[l]||0);
+        const usingBigDetail = !!(STATE.bigFilter || STATE.subFilter);
+        if (usingBigDetail) {
+          const rows = DATA.rawRows || [];
+          for (let i=0; i<rows.length; i++){
+            const r = rows[i];
+            if (STATE.bigFilter && r.bigCat !== STATE.bigFilter) continue;
+            if (STATE.subFilter && r.subCat !== STATE.subFilter) continue;
+            if (STATE.dim === 'type' && STATE.langFilter && r.lang !== STATE.langFilter) continue;
+            if (STATE.dim === 'lang' && STATE.typeFilter && r.type !== STATE.typeFilter) continue;
+            const k = r.productCode;
+            totals[k] = (totals[k]||0) + 1;
+          }
+        } else {
+          for (const prod in tri){
+            let s=0;
+            if (usingTypeFilter) {
+              const m = (tri[prod] && tri[prod][STATE.typeFilter]) || {};
+              for (const l in m) { s += Number(m[l]||0); }
+            } else {
+              for (const t in tri[prod]){
+                const m = tri[prod][t]||{};
+                for (const l in m){
+                  if (usingLangFilter && l !== STATE.langFilter) continue;
+                  s+=Number(m[l]||0);
+                }
               }
             }
+            totals[prod]=s;
           }
-          totals[prod]=s;
         }
         return totals;
       }
-      const STATE = { dim: 'type', langFilter: null, typeFilter: null };
+      const STATE = { dim: 'type', langFilter: null, typeFilter: null, bigFilter: null, subFilter: null };
       function applyProductSort(sort){
         const DEBUG_ORDERS = false; // toggle to true for console logs
         const totals = computeProdTotals();
@@ -1073,12 +1091,27 @@
             if (mode==='type'){
               for (let ti=0; ti<types.length; ti++){
                 const t = types[ti];
-                const langMap = ((DATA.tri[label]||{})[t]||{});
                 let cnt = 0;
-                if (STATE.langFilter) {
-                  cnt = Number(langMap[STATE.langFilter]||0);
+                if (STATE.bigFilter || STATE.subFilter) {
+                  // Count from rawRows with big/sub (and optional lang filter)
+                  const L = STATE.langFilter || null;
+                  const rows = (DATA.rawRows||[]);
+                  for (let i=0;i<rows.length;i++){
+                    const r = rows[i];
+                    if (r.productCode!==label) continue;
+                    if (r.type!==t) continue;
+                    if (L && r.lang!==L) continue;
+                    if (STATE.bigFilter && r.bigCat!==STATE.bigFilter) continue;
+                    if (STATE.subFilter && r.subCat!==STATE.subFilter) continue;
+                    cnt++;
+                  }
                 } else {
-                  cnt = Object.values(langMap).reduce(function(a,b){return a+Number(b||0);},0);
+                  const langMap = ((DATA.tri[label]||{})[t]||{});
+                  if (STATE.langFilter) {
+                    cnt = Number(langMap[STATE.langFilter]||0);
+                  } else {
+                    cnt = Object.values(langMap).reduce(function(a,b){return a+Number(b||0);},0);
+                  }
                 }
                 if (cnt<=0) continue;
                 const w = Math.max(1,xScale(cnt));
@@ -1088,11 +1121,26 @@
             } else {
               for (let li=0; li<langs.length; li++){
                 const l = langs[li];
-                let cnt=0; const byType = DATA.tri[label]||{};
-                if (STATE.typeFilter) {
-                  cnt = Number(((byType[STATE.typeFilter]||{})[l])||0);
+                let cnt=0;
+                if (STATE.bigFilter || STATE.subFilter) {
+                  const T = STATE.typeFilter || null;
+                  const rows = (DATA.rawRows||[]);
+                  for (let i=0;i<rows.length;i++){
+                    const r = rows[i];
+                    if (r.productCode!==label) continue;
+                    if (r.lang!==l) continue;
+                    if (T && r.type!==T) continue;
+                    if (STATE.bigFilter && r.bigCat!==STATE.bigFilter) continue;
+                    if (STATE.subFilter && r.subCat!==STATE.subFilter) continue;
+                    cnt++;
+                  }
                 } else {
-                  for (const t in byType){ cnt+=Number((byType[t]||{})[l]||0); }
+                  const byType = DATA.tri[label]||{};
+                  if (STATE.typeFilter) {
+                    cnt = Number(((byType[STATE.typeFilter]||{})[l])||0);
+                  } else {
+                    for (const t in byType){ cnt+=Number((byType[t]||{})[l]||0); }
+                  }
                 }
                 if (cnt<=0) continue;
                 const w = Math.max(1,xScale(cnt));
@@ -1139,11 +1187,25 @@
               if (STATE.dim === 'lang'){
                 const byType = DATA.tri[label] || {};
                 const langTotals = {}; let inqTotal = 0;
-                if (STATE.typeFilter) {
-                  const m = byType[STATE.typeFilter] || {};
-                  for (const l in m) { const c = Number(m[l]||0); langTotals[l] = (langTotals[l]||0) + c; inqTotal += c; }
+                if (STATE.bigFilter || STATE.subFilter) {
+                  const T = STATE.typeFilter || null;
+                  const rows = DATA.rawRows || [];
+                  for (let i=0;i<rows.length;i++){
+                    const r = rows[i];
+                    if (r.productCode!==label) continue;
+                    if (T && r.type!==T) continue;
+                    if (STATE.bigFilter && r.bigCat!==STATE.bigFilter) continue;
+                    if (STATE.subFilter && r.subCat!==STATE.subFilter) continue;
+                    const l = r.lang; const c = 1;
+                    langTotals[l] = (langTotals[l]||0) + c; inqTotal += c;
+                  }
                 } else {
-                  for (const t in byType){ const m = byType[t]||{}; for (const l in m){ const c=Number(m[l]||0); langTotals[l]=(langTotals[l]||0)+c; inqTotal+=c; } }
+                  if (STATE.typeFilter) {
+                    const m = byType[STATE.typeFilter] || {};
+                    for (const l in m) { const c = Number(m[l]||0); langTotals[l] = (langTotals[l]||0) + c; inqTotal += c; }
+                  } else {
+                    for (const t in byType){ const m = byType[t]||{}; for (const l in m){ const c=Number(m[l]||0); langTotals[l]=(langTotals[l]||0)+c; inqTotal+=c; } }
+                  }
                 }
                 if (inqTotal <= 0) {
                   const w = Math.max(1,xScale(ord));
@@ -1217,6 +1279,16 @@
       document.addEventListener('click', function(e){
         const t = e.target;
         if (!t || !t.closest) return;
+        const pieSeg = t.closest('[data-role="bigpie"]');
+        if (pieSeg) {
+          const big = pieSeg.getAttribute('data-big') || '';
+          const sub = pieSeg.getAttribute('data-sub') || '';
+          const same = (STATE.bigFilter===big && STATE.subFilter===sub);
+          STATE.bigFilter = same ? null : big;
+          STATE.subFilter = same ? null : sub;
+          try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
+          return;
+        }
         if (t.id === 'tab-resv-type') {
           const tabResvType = document.getElementById('tab-resv-type');
           const tabResvLang = document.getElementById('tab-resv-lang');
@@ -1260,7 +1332,7 @@
       function formatPercent(v){
         return (v*100).toFixed(1).replace(/.0$/, '') + '%';
       }
-      function drawPie(entries, colors, title){
+      function drawPie(entries, colors, title, attrsFor){
         const total = entries.reduce((a, [,c]) => a + c, 0);
         if (!total) return '';
         const W = 240, H = 200, CX = 90, CY = 100, R = 70;
@@ -1271,7 +1343,8 @@
           const label = entries[0][0];
           const c = entries[0][1];
           const color = colors(label);
-          parts.push('<circle cx="' + CX + '" cy="' + CY + '" r="' + R + '" fill="' + color + '"></circle>');
+          const extra = attrsFor ? attrsFor(label) : '';
+          parts.push('<circle cx="' + CX + '" cy="' + CY + '" r="' + R + '" fill="' + color + '"'+extra+'></circle>');
           leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (100%)</span></div>');
           return '<div class="pie-title">' + title + '</div>' +
                  '<svg width="' + W + '" height="' + H + '"><g>' + parts.join('') + '</g></svg>' +
@@ -1285,7 +1358,8 @@
           const large = (a1 - a0) > Math.PI ? 1 : 0;
           const color = colors(label);
           const d = 'M ' + CX + ' ' + CY + ' L ' + x0 + ' ' + y0 + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 + ' Z';
-          parts.push('<path d="' + d + '" fill="' + color + '"></path>');
+          const extra = attrsFor ? attrsFor(label) : '';
+          parts.push('<path d="' + d + '" fill="' + color + '"'+extra+'></path>');
           leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (' + formatPercent(frac) + ')</span></div>');
           a0 = a1;
         }
