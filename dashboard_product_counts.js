@@ -897,6 +897,15 @@ function generateHtml(data, opts = {}) {
             <option value="asc">문의 적은 순</option>
           </select>
         </label>
+        <div id="tabs-langfilter" class="tabs" role="tablist" style="margin-left:8px; gap:6px; display:none;">
+          <button class="tab" type="button" data-lang="영어">영어</button>
+          <button class="tab" type="button" data-lang="일본어">일본어</button>
+          <button class="tab" type="button" data-lang="대만어">대만어</button>
+          <button class="tab" type="button" data-lang="홍콩어">홍콩어</button>
+        </div>
+        <div id="tabs-typefilter" class="tabs" role="tablist" style="margin-left:8px; gap:6px; display:none;">
+          ${types.map(t => `<button class=\"tab\" type=\"button\" data-type=\"${t.replace(/"/g,'&quot;')}\">${t}</button>`).join('')}
+        </div>
       </div>
       <svg id="chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" data-ml="${marginLeft}" data-barh="${barHeight}">
         <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
@@ -1047,6 +1056,8 @@ function generateHtml(data, opts = {}) {
       const resvCodeChartCard = document.getElementById('resv-code-chart-card');
       const tabProdType = document.getElementById('tab-prod-type');
       const tabProdLang = document.getElementById('tab-prod-lang');
+      const tabsLangFilter = document.getElementById('tabs-langfilter');
+      const tabsTypeFilter = document.getElementById('tabs-typefilter');
       const legendType = document.getElementById('legend-type');
       const legendLang = document.getElementById('legend-lang');
       const legendResv = document.getElementById('legend-resv');
@@ -1573,6 +1584,9 @@ function generateHtml(data, opts = {}) {
           tabProdLang.setAttribute('aria-selected','false');
         }
         STATE.dim = 'type';
+        if (tabsLangFilter) tabsLangFilter.style.display = '';
+        if (tabsTypeFilter) tabsTypeFilter.style.display = 'none';
+        if (tabsLangFilter) tabsLangFilter.style.display = '';
         try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
         barsType.style.display = '';
         barsLang.style.display = 'none';
@@ -1587,6 +1601,9 @@ function generateHtml(data, opts = {}) {
           tabProdType.setAttribute('aria-selected','false');
         }
         STATE.dim = 'lang';
+        if (tabsLangFilter) tabsLangFilter.style.display = 'none';
+        if (tabsTypeFilter) tabsTypeFilter.style.display = '';
+        if (tabsLangFilter) tabsLangFilter.style.display = 'none';
         try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
         barsLang.style.display = '';
         barsType.style.display = 'none';
@@ -1595,18 +1612,33 @@ function generateHtml(data, opts = {}) {
       }
       if (tabProdType) tabProdType.addEventListener('click', showProdType);
       if (tabProdLang) tabProdLang.addEventListener('click', showProdLang);
+      if (tabsLangFilter) tabsLangFilter.style.display = '';
 
       // Product sorting
       function computeProdTotals(){
         const tri = DATA.tri || {};
         const totals = {};
+        const usingLangFilter = (STATE.dim === 'type' && STATE.langFilter);
+        const usingTypeFilter = (STATE.dim === 'lang' && STATE.typeFilter);
         for (const prod in tri){
-          let s=0; for (const t in tri[prod]){ const m=tri[prod][t]||{}; for (const l in m){ s+=Number(m[l]||0); } }
+          let s=0;
+          if (usingTypeFilter) {
+            const m = (tri[prod] && tri[prod][STATE.typeFilter]) || {};
+            for (const l in m) { s += Number(m[l]||0); }
+          } else {
+            for (const t in tri[prod]){
+              const m = tri[prod][t]||{};
+              for (const l in m){
+                if (usingLangFilter && l !== STATE.langFilter) continue;
+                s+=Number(m[l]||0);
+              }
+            }
+          }
           totals[prod]=s;
         }
         return totals;
       }
-      const STATE = { dim: 'type' };
+      const STATE = { dim: 'type', langFilter: null, typeFilter: null };
       function applyProductSort(sort){
         const DEBUG_ORDERS = false; // toggle to true for console logs
         const totals = computeProdTotals();
@@ -1651,8 +1683,14 @@ function generateHtml(data, opts = {}) {
             if (mode==='type'){
               for (let ti=0; ti<types.length; ti++){
                 const t = types[ti];
-                const langMap = ((DATA.tri[label]||{})[t]||{}); 
-                const cnt = Object.values(langMap).reduce(function(a,b){return a+Number(b||0);},0); if (cnt<=0) continue;
+                const langMap = ((DATA.tri[label]||{})[t]||{});
+                let cnt = 0;
+                if (STATE.langFilter) {
+                  cnt = Number(langMap[STATE.langFilter]||0);
+                } else {
+                  cnt = Object.values(langMap).reduce(function(a,b){return a+Number(b||0);},0);
+                }
+                if (cnt<=0) continue;
                 const w = Math.max(1,xScale(cnt));
                 parts.push('<rect class="seg seg-type" data-role="type" data-prod="'+label+'" data-cat="'+t+'" x="'+cursor+'" y="'+baseY+'" width="'+w+'" height="'+barHeight+'" fill="'+colorOfType(t)+'" />');
                 cursor += w;
@@ -1660,7 +1698,12 @@ function generateHtml(data, opts = {}) {
             } else {
               for (let li=0; li<langs.length; li++){
                 const l = langs[li];
-                let cnt=0; const byType = DATA.tri[label]||{}; for (const t in byType){ cnt+=Number((byType[t]||{})[l]||0); }
+                let cnt=0; const byType = DATA.tri[label]||{};
+                if (STATE.typeFilter) {
+                  cnt = Number(((byType[STATE.typeFilter]||{})[l])||0);
+                } else {
+                  for (const t in byType){ cnt+=Number((byType[t]||{})[l]||0); }
+                }
                 if (cnt<=0) continue;
                 const w = Math.max(1,xScale(cnt));
                 parts.push('<rect class="seg seg-lang" data-role="lang" data-prod="'+label+'" data-cat="'+l+'" x="'+cursor+'" y="'+baseY+'" width="'+w+'" height="'+barHeight+'" fill="'+colorOfLang(l)+'" />');
@@ -1706,7 +1749,12 @@ function generateHtml(data, opts = {}) {
               if (STATE.dim === 'lang'){
                 const byType = DATA.tri[label] || {};
                 const langTotals = {}; let inqTotal = 0;
-                for (const t in byType){ const m = byType[t]||{}; for (const l in m){ const c=Number(m[l]||0); langTotals[l]=(langTotals[l]||0)+c; inqTotal+=c; } }
+                if (STATE.typeFilter) {
+                  const m = byType[STATE.typeFilter] || {};
+                  for (const l in m) { const c = Number(m[l]||0); langTotals[l] = (langTotals[l]||0) + c; inqTotal += c; }
+                } else {
+                  for (const t in byType){ const m = byType[t]||{}; for (const l in m){ const c=Number(m[l]||0); langTotals[l]=(langTotals[l]||0)+c; inqTotal+=c; } }
+                }
                 if (inqTotal <= 0) {
                   const w = Math.max(1,xScale(ord));
                   return '<rect class="orders-bar" data-prod="'+label+'" x="'+marginLeft+'" y="'+yo+'" width="'+w+'" height="'+hb+'" fill="#9ca3af" fill-opacity="0.6" />';
@@ -1734,6 +1782,39 @@ function generateHtml(data, opts = {}) {
         attachProductLabelClick(); attachHover();
       }
       const sortProdSel = document.getElementById('sort-prod');
+      // Language filter (only affects '문의 유형' internal tab)
+      if (tabsLangFilter) {
+        tabsLangFilter.addEventListener('click', function(e){
+          const btn = e.target && e.target.closest('button[data-lang]');
+          if (!btn) return;
+          const code = btn.getAttribute('data-lang');
+          STATE.langFilter = (STATE.langFilter === code) ? null : code;
+          // update UI classes
+          const bs = tabsLangFilter.querySelectorAll('button[data-lang]');
+          bs.forEach(function(b){
+            const on = (STATE.langFilter && b.getAttribute('data-lang') === STATE.langFilter);
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
+        });
+      }
+      // Type filter (only affects '언어' internal tab)
+      if (tabsTypeFilter) {
+        tabsTypeFilter.addEventListener('click', function(e){
+          const btn = e.target && e.target.closest('button[data-type]');
+          if (!btn) return;
+          const key = btn.getAttribute('data-type');
+          STATE.typeFilter = (STATE.typeFilter === key) ? null : key;
+          const bs = tabsTypeFilter.querySelectorAll('button[data-type]');
+          bs.forEach(function(b){
+            const on = (STATE.typeFilter && b.getAttribute('data-type') === STATE.typeFilter);
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+          });
+          try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
+        });
+      }
       // Expose manual rebuild for console debugging
       window.rebuildOrders = function(){ try { const s = document.getElementById('sort-prod'); applyProductSort(s?s.value:'desc'); } catch(e) { console.warn('[orders] rebuild error', e); } };
       if (sortProdSel) sortProdSel.addEventListener('change', ()=>applyProductSort(sortProdSel.value||'desc'));
