@@ -2035,7 +2035,8 @@ function generateHtml(data, opts = {}) {
           const color = colors(label);
           const extra = attrsFor ? attrsFor(label) : '';
           parts.push('<circle cx="' + CX + '" cy="' + CY + '" r="' + R + '" fill="' + color + '"'+extra+'></circle>');
-          leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (100%)</span></div>');
+          const extraLeg = attrsFor ? attrsFor(label) : '';
+          leg.push('<div class="pie-legend-item"'+extraLeg+' style="cursor:pointer"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (100%)</span></div>');
           return '<div class="pie-title">' + title + '</div>' +
                  '<svg width="' + W + '" height="' + H + '"><g>' + parts.join('') + '</g></svg>' +
                  '<div class="pie-legend">' + leg.join('') + '</div>';
@@ -2050,7 +2051,8 @@ function generateHtml(data, opts = {}) {
           const d = 'M ' + CX + ' ' + CY + ' L ' + x0 + ' ' + y0 + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x1 + ' ' + y1 + ' Z';
           const extra = attrsFor ? attrsFor(label) : '';
           parts.push('<path d="' + d + '" fill="' + color + '"'+extra+'></path>');
-          leg.push('<div class="pie-legend-item"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (' + formatPercent(frac) + ')</span></div>');
+          const extraLeg = attrsFor ? attrsFor(label) : '';
+          leg.push('<div class="pie-legend-item"'+extraLeg+' style="cursor:pointer"><span class="swatch" style="background:' + color + '"></span><span>' + label + ' · ' + c + ' (' + formatPercent(frac) + ')</span></div>');
           a0 = a1;
         }
         return '<div class="pie-title">' + title + '</div>' +
