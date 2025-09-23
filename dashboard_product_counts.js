@@ -765,6 +765,9 @@ function generateHtml(data, opts = {}) {
     .ratio-code { font-weight:600; color:#111827; }
     .ratio-val { min-width: 64px; text-align:right; font-variant-numeric: tabular-nums; }
     .ratio-detail { color:#6b7280; font-size:11px; }
+    .filters-bar { display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap; align-items:center; }
+    .badge { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; font-size:12px; border:1px solid #c7d2fe; background:#eef2ff; color:#1f2937; border-radius:9999px; }
+    .badge-close { border:none; background:transparent; color:#6b7280; cursor:pointer; font-size:12px; line-height:1; padding:0; }
     .lang-type-section { margin-top: 14px; }
     .lang-type-title { font-size:12px; color:#374151; margin-bottom:6px; }
     .lt-cards { display:flex; gap:12px; overflow-x:auto; padding-bottom: 4px; }
@@ -815,6 +818,8 @@ function generateHtml(data, opts = {}) {
     .ratio-item { color:#d1d5db; }
     .ratio-code { color:#e5e7eb; }
     .ratio-detail { color:#9ca3af; }
+    .badge { background:#1f2937; border-color:#374151; color:#e5e7eb; }
+    .badge-close { color:#9ca3af; }
     .lang-type-title { color:#d1d5db; }
     .lt-card { background:#0d1323; border-color:#1f2937; }
     .lt-card-title { color:#e5e7eb; }
@@ -891,6 +896,7 @@ function generateHtml(data, opts = {}) {
       </div>
     <h1 id="page-title">상품 기반 분석</h1>
     <div id="chart-desc" class="muted">X축: 건수 · Y축: 상품명 (총 ${total})</div>
+    <div id="active-filters" class="filters-bar" aria-label="활성 필터" style="display:none;"></div>
     <div id="bigcat-pies" class="card" style="margin:10px 0;">
       <div class="line-chart-header" style="margin-bottom:8px; display:flex; align-items:center;">
         <div class="line-chart-title">대카테고리별 세부 카테고리 분포</div>
@@ -1049,6 +1055,7 @@ function generateHtml(data, opts = {}) {
             if (typeof rebuildRatios==='function') { const s2 = document.getElementById('sort-ratios'); rebuildRatios(s2?s2.value:'desc'); }
             if (typeof rebuildLangType==='function') { const s3 = document.getElementById('sort-langtype'); rebuildLangType(s3?s3.value:'desc'); }
             if (typeof renderBigcatPies==='function') { renderBigcatPies(); }
+            if (typeof renderActiveFilters==='function') { renderActiveFilters(); }
             const desc = document.getElementById('chart-desc');
             if (desc) {
               let total = 0; const tri = DATA.tri || {};
@@ -1097,6 +1104,19 @@ function generateHtml(data, opts = {}) {
       const detail = document.getElementById('bar-detail');
       const svg = document.getElementById('chart');
       const toggleOrders = document.getElementById('toggle-orders');
+
+      function renderActiveFilters(){
+        const el = document.getElementById('active-filters'); if (!el) return;
+        const items = [];
+        if (STATE.bigFilter) items.push({ key:'big', label:'대카테고리', value: STATE.bigFilter });
+        if (STATE.subFilter) items.push({ key:'sub', label:'세부 카테고리', value: STATE.subFilter });
+        if (!items.length) { el.style.display='none'; el.innerHTML=''; return; }
+        function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        el.innerHTML = items.map(function(it){
+          return '<span class="badge" data-key="'+it.key+'">'+it.label+': '+esc(it.value)+' <button class="badge-close" type="button" aria-label="필터 해제" data-clear="'+it.key+'">×</button></span>';
+        }).join('');
+        el.style.display='';
+      }
 
       function renderBigcatPies(){
         const wrap = document.getElementById('bigcat-pies-wrap'); if (!wrap) return;
@@ -1458,6 +1478,7 @@ function generateHtml(data, opts = {}) {
           }
         } catch (e) {}
         try { if (typeof renderBigcatPies==='function') renderBigcatPies(); } catch(e){}
+        try { renderActiveFilters(); } catch(e){}
       }
       function showAnalResv(){
         tabAnalResv.classList.add('active');
@@ -1947,6 +1968,15 @@ function generateHtml(data, opts = {}) {
           STATE.bigFilter = same ? null : big;
           STATE.subFilter = same ? null : sub;
           try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
+          return;
+        }
+        const close = t.closest('button.badge-close');
+        if (close) {
+          const key = close.getAttribute('data-clear');
+          if (key === 'big') { STATE.bigFilter = null; STATE.subFilter = null; }
+          else if (key === 'sub') { STATE.subFilter = null; }
+          try { const s = document.getElementById('sort-prod'); if (typeof applyProductSort==='function') applyProductSort(s?s.value:'desc'); } catch(e){}
+          try { renderActiveFilters(); } catch(e){}
           return;
         }
         if (t.id === 'tab-resv-type') {
