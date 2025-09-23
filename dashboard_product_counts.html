@@ -1253,6 +1253,14 @@
           }
         }
         attachProductLabelClick(); attachHover();
+        // Update chart description total to reflect current filters
+        try {
+          const descEl = document.getElementById('chart-desc');
+          if (descEl) {
+            const sum = Object.keys(totals).reduce((a,k)=> a + Number(totals[k]||0), 0);
+            descEl.textContent = 'X축: 건수 · Y축: 상품명 (총 ' + sum + ')';
+          }
+        } catch (e) {}
         try { renderActiveFilters(); } catch(e){}
       }
       const sortProdSel = document.getElementById('sort-prod');
