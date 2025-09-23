@@ -99,11 +99,25 @@
 
 ## 백엔드
 - 데이터 소스/스키마
-  - 문의 데이터(user_inquiry): id, created_at, product_code, product_name, lang, type, reservation_code, big_category(대카테고리), sub_category(세부 카테고리), insight(Boolean).
-  - 주문 데이터(product_order): product_code, reserve.created_at, order_number(또는 수량), 기타 메타(선택).
-  - 정규화 규칙: 
-    - product_code 추출(문자열 내 숫자 시퀀스 마지막 5자리), locale 정규화, 상품명 매핑(spot_translation 등).
-    - 대/세부 카테고리 값 제공(현재 더미는 결정적 해시로 분배, 실데이터 매핑 정의 필요).
+  - user_inquiry (user_inquiry_dummy_database.csv)
+    - 상품 코드: id=41989966629273인 custom_fields의 값에서 마지막 5자리 수 추출 / 유저가 입력한 spot 코드
+    - 상품 명: id=41989966629273인 custom_fields의 스팟 코드로 spot_translation에서 language='ko'인 spot_name 매핑
+    - 언어: id=41989966629273인 custom_fields의 locale (예: zh-TW)
+    - 카테고리: id=41988850452761인 custom_fields
+    - 문의 유형: id=41988618714009인 custom_fields
+    - 문의 내용: ticket_summary
+    - 요청 ID: id
+    - 예약코드: id=41989351980441인 custom_fields
+    - 예약 상태: 실제 개발 시 활용하지 않음
+    - createdAt: created_at
+    - 대/세부 카테고리 파생: custom_values 중 id=41988850452761의 value를 '_' 기준으로 파싱하여 저장 (대카테고리, 세부 카테고리)
+  - product_order (product_order_dummy_database.csv)
+    - 주문 ID: reserve.code
+    - 상품 코드: id=41989966629273인 custom_fields의 값에서 마지막 5자리 수 추출
+    - 상품 명: id=41989966629273인 custom_fields의 스팟 코드로 spot_translation에서 language='ko'인 spot_name 매핑
+    - 주문 일시: reserve.created_at
+    - 수량: reserve.order_number
+    - (주문 상태/결제 수단/주문 금액: 미사용 → 수집/전송 제외)
 
 - 집계 요구(차트별)
   - 일자 별 문의 수: created_at 기반 일/주/월/분기/반기/연 단위 버킷 집계(필터·인사이트 반영).
