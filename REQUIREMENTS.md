@@ -69,16 +69,26 @@
 - 일자 별 문의 수 차트
   - UI: 단위 탭(일/주/월/분기/반기/연), 메타 정보(기간, 총합, 직전 기간 대비 증감), 호버 툴팁
   - 동작: 단위 전환/인사이트 토글/전역 필터 변경 시 재집계 및 재렌더
+  - 필요 데이터(프런트):
+    - 시계열: `[ { date: 'YYYY-MM-DD', count: number } ]` (프런트에서 단위 버킷 변환)
+    - 총합/기간: `totalInquiries`, `minDate`, `maxDate`
+    - (선택) 사전 버킷 집계: 일/주/월/분기/반기/연 별 시리즈
 
 - 최근 문의 표
   - UI: 검색 입력, 정렬(최신순/오래된순), 페이지네이션(10행/페이지), 링크 컬럼(요청 ID/예약코드)
   - 동작: 필터/정렬/검색/페이지 전환 시 클라이언트 재렌더
   - 링크: 요청 ID → 젠데스크 문의 상세, 예약코드 → 어드민 예약 상세로 이동(새 탭)
+  - 필요 데이터(프런트) — 행 스키마:
+    - `id`, `createdAt`, `productCode`, `productName`, `lang`, `type`, `summary`, `resvCode`
+    - (선택) 링크 템플릿: `zendeskTicketBaseUrl`, `adminReservationBaseUrl`
 
 - 대카테고리별 세부 카테고리 파이차트(여행/쇼핑/어학당)
   - UI: 3개의 파이차트, 범례 동시 제공, 세그먼트/범례 클릭 가능 커서
   - 동작: 세그먼트/범례 클릭 시 하단 상품 차트에 교차 필터(대/세부 카테고리) 적용 및 배지 갱신
   - 인사이트 토글 시 FULL/INSIGHT 두 세트를 CSS로 전환
+  - 필요 데이터(프런트):
+    - 분포 맵: `{ [bigCategory: string]: { [subCategory: string]: number } }`
+    - 표시 대상 대카테고리 목록: `['여행','쇼핑','어학당']`
 
 - 상품 기반 분석 차트(막대: 상품명 Y축, 건수 X축)
   - UI: 내부 탭(문의 유형/언어), 정렬(많은 순/적은 순), 주문량 보기 토글, 상품 라벨 클릭 툴팁
@@ -88,14 +98,22 @@
     - 주문량 보기: 언어 모드에서는 언어 분포 비율로 주문 스택 분해, 문의 유형 모드에서는 회색 단일 바
     - 상품 툴팁: 단위 탭과 문의/주문 시계열(그룹형 막대) 제공, 외부 클릭으로 닫힘
   - 총 건수: 현재 적용된 모든 필터를 반영해 상단 설명의 총합을 즉시 갱신
+  - 필요 데이터(프런트):
+    - `productOrder: string[]`
+    - `tri: { [product]: { [type]: { [lang]: number } } }`
+    - `types: string[]`, `langs: string[]`, `codeNameMap: { [product]: string }`
+    - `orderCounts: { [product]: number }`
+    - 툴팁 시계열: `perProductDateCounts`, `perProductOrderDateCounts`
 
 - 상품 별 주문 대비 문의 비율 카드
   - UI: 상품명·비율(%)·문의/주문 값 표시, 정렬(문의/비율 기준) 옵션
   - 동작: 인사이트 토글/전역 필터 반영해 재계산
+  - 필요 데이터(프런트): `inquiryTotalsByProduct`, `orderTotalsByProduct`
 
 - 언어별 문의 유형 분포 카드
   - UI: 언어 카드별 Top N 유형과 비율(%), 정렬 옵션
   - 동작: 인사이트 토글/전역 필터 반영해 재계산
+  - 필요 데이터(프런트): `langTypeObj[lang][type] = count`
 
 ## 백엔드
 - 데이터 소스/스키마
@@ -128,6 +146,14 @@
   - 카드 집계: 
     - 주문 대비 문의 비율 = Σ(문의 수) / Σ(주문 수량)
     - 언어별 문의 유형 분포 = lang별 {type→count} 및 Top N
+  - 응답 데이터(권장 스키마 예시)
+    - 공통 메타: `date_from`, `date_to`, `product_search`, `insight_only`
+    - 트렌드: `series: Array<{ date: 'YYYY-MM-DD', count: number }>`
+    - 테이블: `rows: Array<{ id, createdAt, productCode, productName, lang, type, summary, resvCode }>`
+    - 파이(대/세부): `bigDetail: { [big]: { [sub]: number } }`
+    - 상품 차트: `productOrder`, `tri`, `types`, `langs`, `codeNameMap`, `orderCounts`, `perProductDateCounts`, `perProductOrderDateCounts`
+    - 비율 카드: `inquiryTotalsByProduct`, `orderTotalsByProduct`
+    - 언어×유형 카드: `langType: { [lang]: { [type]: number } }`
 
 - 제공 방식/엔드포인트(선택)
   - 정적 생성(JSON/CSV) 또는 REST API
